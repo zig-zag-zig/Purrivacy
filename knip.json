@@ -1,0 +1,13 @@
+{
+    "$schema": "https://unpkg.com/knip@5/schema.json",
+    "ignoreBinaries": [
+        "jest"
+    ],
+    "project": [
+        "src/**/*.ts"
+    ],
+    "entry": [
+        "src/app.ts"
+    ],
+    "ignoreExportsUsedInFile": false
+}

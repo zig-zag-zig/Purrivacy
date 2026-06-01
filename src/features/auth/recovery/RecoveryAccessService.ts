@@ -1,7 +1,7 @@
 import { auth, db } from '../../../infrastructure/firebase';
 import { UsernameIdentity } from '../identity/UsernameIdentity';
 import { UserDataSecurity } from '../../user/domain/UserDataSecurity';
-import { UserEncryptedData } from '../../../core/types';
+import { UserRecoveryEncryptedData } from '../../../core/types';
 import { BadRequestError } from '../../../utils/errors';
 import { CryptoUtils } from '../../../utils/cryptoUtils';
 
@@ -42,7 +42,7 @@ export class RecoveryAccessService {
     static async createRecoveryToken(
         usernameInput: unknown,
         recoveryVerifierInput: unknown
-    ): Promise<{ userId: string; userEncrypted: UserEncryptedData; tempToken: string }> {
+    ): Promise<{ userId: string; userEncrypted: UserRecoveryEncryptedData; tempToken: string }> {
         const username = UsernameIdentity.normalizeUsername(usernameInput);
         if (typeof recoveryVerifierInput !== 'string' || !RECOVERY_VERIFIER_RE.test(recoveryVerifierInput)) {
             throw new BadRequestError('Invalid recovery credentials');
@@ -54,7 +54,7 @@ export class RecoveryAccessService {
         }
 
         const [doc] = await db.getAll(this.usersCollection.doc(user.uid), {
-            fieldMask: ['dekPassword', 'dekSeed', 'keys', 'recoveryVerifierHash'],
+            fieldMask: ['dekSeed', 'recoveryVerifierHash'],
         });
         if (!doc.exists) {
             throw new BadRequestError('Invalid recovery credentials');
@@ -66,7 +66,9 @@ export class RecoveryAccessService {
             throw new BadRequestError('Invalid recovery credentials');
         }
 
-        const userEncrypted = UserDataSecurity.sanitizeUserEncryptedData(doc.data());
+        const userEncrypted = {
+            dekSeed: UserDataSecurity.sanitizeEncryption(doc.get('dekSeed'), 'dekSeed'),
+        };
         const tempToken = await auth.createCustomToken(user.uid, { signInMethod: 'customToken' });
 
         return {

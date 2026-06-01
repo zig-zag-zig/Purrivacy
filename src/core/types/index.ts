@@ -4,6 +4,10 @@ export interface UserEncryptedData {
     keys: EncryptionBase[];
 }
 
+export interface UserRecoveryEncryptedData {
+    dekSeed: Encryption;
+}
+
 export interface User extends UserEncryptedData {
     mfaEnabled?: boolean;
     recoveryVerifierSalt: string;

@@ -62,6 +62,103 @@ npm run dev
 
 The API defaults to `http://localhost:5000`.
 
+## Docker
+
+Purrivacy can run as its own small Docker Compose project. Keep it separate from Pawify so each app can deploy, restart, roll back, and tune memory without affecting the other one.
+
+For local Docker:
+
+```bash
+cp .env.prod.example .env.local
+```
+
+Edit `.env.local` and set:
+
+```env
+COMPOSE_PROJECT_NAME=purrivacy-local
+PURRIVACY_ENV_FILE=.env.local
+PURRIVACY_IMAGE=purrivacy:local
+PURRIVACY_SECRETS_DIR=./secrets/local
+PURRIVACY_HOST_BIND_ADDRESS=127.0.0.1
+PURRIVACY_HOST_PORT=3002
+APP_ENV=local
+NODE_ENV=production
+SENTRY_ENABLED=false
+GOOGLE_APPLICATION_CREDENTIALS=/var/purrivacy/secrets/firebase-service-account.json
+```
+
+Put the Firebase service account here:
+
+```text
+secrets/local/firebase-service-account.json
+```
+
+Then run:
+
+```bash
+docker compose --env-file .env.local up -d --build
+curl http://127.0.0.1:3002/v1/health
+```
+
+For the VPS, create ignored files:
+
+```text
+/root/purrivacy-secrets/.env
+/root/purrivacy-secrets/firebase-service-account.json
+```
+
+The `.env` file should match `.env.prod.example`, with real values for `MFA_KEK`, Firebase, Sentry, and `AUTH_EMAIL_DOMAIN`. Keep:
+
+```env
+PURRIVACY_HOST_BIND_ADDRESS=127.0.0.1
+PURRIVACY_HOST_PORT=3002
+PORT=3002
+GOOGLE_APPLICATION_CREDENTIALS=/var/purrivacy/secrets/firebase-service-account.json
+```
+
+The normal deploy path is GitHub Actions: pull requests into `main` run CI, and pushes to `main` build a GHCR image and deploy production. The VPS pulls the prebuilt image instead of building it locally.
+
+Configure GitHub secrets:
+
+```text
+PURRIVACY_VPS_HOST
+PURRIVACY_VPS_USER
+PURRIVACY_VPS_SSH_KEY
+PURRIVACY_VPS_PORT
+PURRIVACY_ENV_FILE_B64
+PURRIVACY_FIREBASE_SERVICE_ACCOUNT_JSON_B64
+```
+
+Configure GitHub variables if needed:
+
+```text
+PURRIVACY_REPO_URL
+PURRIVACY_SECRET_SOURCE_DIR
+```
+
+Create the base64 secret values locally with `base64 -w 0 .env.prod` and `base64 -w 0 secrets/prod/firebase-service-account.json`. Docker is installed automatically by the deploy script if the VPS is missing Docker or the Compose plugin.
+
+Manual deploy from a repo checkout on the VPS is still available:
+
+```bash
+sudo ./scripts/deploy_purrivacy_docker.sh \
+  --repo-url https://github.com/zig-zag-zig/Purrivacy.git \
+  --repo-branch main \
+  --secrets-source-dir /root/purrivacy-secrets \
+  --force-secret-overwrite \
+  --start
+```
+
+If PM2 is currently using port `3002`, stop it before starting Docker:
+
+```bash
+pm2 stop purrivacy
+pm2 delete purrivacy
+pm2 save
+```
+
+After Docker is healthy, the VPS tunnel can keep pointing at `http://127.0.0.1:3002`.
+
 ## Environment Variables
 
 | Variable | Required | Description |
@@ -89,6 +186,42 @@ npm test         # Run the Jest test suite
 npm run build    # Compile TypeScript into lib/
 npm start        # Run the compiled production server
 ```
+
+## Branching And Releases
+
+Purrivacy uses trunk-based development:
+
+- `main` is the protected production branch.
+- Pull requests into `main` run CI.
+- Merging or pushing to `main` builds a GHCR image and deploys production.
+
+Working branches:
+
+- `feature/<short-name>` for new behavior.
+- `fix/<short-name>` for normal bug fixes.
+- `hotfix/<short-name>` for urgent production fixes.
+
+Normal flow:
+
+```bash
+git switch main
+git pull --ff-only origin main
+git switch -c feature/<short-name>
+```
+
+Open pull requests from `feature/*` or `fix/*` into `main`. When merged, GitHub Actions runs CI, builds the Docker image, and deploys production.
+
+Hotfix flow:
+
+```bash
+git switch main
+git pull --ff-only origin main
+git switch -c hotfix/<short-name>
+```
+
+Open the hotfix pull request into `main`. Once merged, it deploys through the same production pipeline.
+
+There is no `develop` or test deploy branch for Purrivacy.
 
 ## API Overview
 

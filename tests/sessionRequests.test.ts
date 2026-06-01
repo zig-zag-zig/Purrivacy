@@ -14,6 +14,8 @@ import {
   parseSavePushTokenRequest,
   parseDeletePushTokenRequest,
 } from '../src/features/user/api/userRequests';
+import { MAX_PUSH_TOKEN_LENGTH } from '../src/core/constants';
+import { normalizePushToken } from '../src/features/notification/infrastructure/pushTokens/pushTokenNormalization';
 
 describe('session and MFA request parsing', () => {
   it('extracts only non-empty Bearer tokens', () => {
@@ -97,5 +99,10 @@ describe('session and MFA request parsing', () => {
     expect(() => parseSavePushTokenRequest({ pushToken: 1 }, 'device-1')).toThrow(BadRequestError);
     expect(() => parseSavePushTokenRequest({ pushToken: 'token' }, '   ')).toThrow(BadRequestError);
     expect(() => parseDeletePushTokenRequest({})).toThrow(BadRequestError);
+  });
+
+  it('limits stored push-token length', () => {
+    expect(normalizePushToken(' token ')).toBe('token');
+    expect(() => normalizePushToken('x'.repeat(MAX_PUSH_TOKEN_LENGTH + 1))).toThrow(BadRequestError);
   });
 });

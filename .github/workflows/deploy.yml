@@ -110,8 +110,9 @@ jobs:
           VPS_SSH_KEY: ${{ secrets.PURRIVACY_VPS_SSH_KEY }}
           PURRIVACY_REPO_URL: ${{ vars.PURRIVACY_REPO_URL || format('https://github.com/{0}.git', github.repository) }}
           PURRIVACY_DEPLOY_BRANCH: ${{ github.ref_name }}
-          PURRIVACY_INSTALL_DOCKER: ${{ vars.PURRIVACY_INSTALL_DOCKER }}
           PURRIVACY_SECRET_SOURCE_DIR: ${{ vars.PURRIVACY_SECRET_SOURCE_DIR }}
+          PURRIVACY_ENV_FILE_B64: ${{ secrets.PURRIVACY_ENV_FILE_B64 }}
+          PURRIVACY_FIREBASE_SERVICE_ACCOUNT_JSON_B64: ${{ secrets.PURRIVACY_FIREBASE_SERVICE_ACCOUNT_JSON_B64 }}
           PURRIVACY_DEPLOY_IMAGE: ${{ needs.build-test.outputs.image-ref }}
           PURRIVACY_IMAGE_REGISTRY: ghcr.io
           PURRIVACY_IMAGE_REGISTRY_USER: ${{ github.actor }}
@@ -125,6 +126,8 @@ jobs:
           : "${PURRIVACY_REPO_URL:?Missing PURRIVACY_REPO_URL}"
           : "${PURRIVACY_DEPLOY_BRANCH:?Missing PURRIVACY_DEPLOY_BRANCH}"
           : "${PURRIVACY_DEPLOY_IMAGE:?Missing built Docker image ref}"
+          : "${PURRIVACY_ENV_FILE_B64:?Missing GitHub environment secret PURRIVACY_ENV_FILE_B64}"
+          : "${PURRIVACY_FIREBASE_SERVICE_ACCOUNT_JSON_B64:?Missing GitHub environment secret PURRIVACY_FIREBASE_SERVICE_ACCOUNT_JSON_B64}"
 
           if [[ "$PURRIVACY_DEPLOY_BRANCH" != "main" ]]; then
             echo "Purrivacy production deploys must run from main, not $PURRIVACY_DEPLOY_BRANCH." >&2
@@ -132,7 +135,6 @@ jobs:
           fi
 
           VPS_PORT="${VPS_PORT:-22}"
-          PURRIVACY_INSTALL_DOCKER="${PURRIVACY_INSTALL_DOCKER:-false}"
           PURRIVACY_SECRET_SOURCE_DIR="${PURRIVACY_SECRET_SOURCE_DIR:-/root/purrivacy-secrets}"
 
           install -m 700 -d ~/.ssh
@@ -142,15 +144,16 @@ jobs:
 
           remote_repo_url="$(printf '%q' "$PURRIVACY_REPO_URL")"
           remote_branch="$(printf '%q' "$PURRIVACY_DEPLOY_BRANCH")"
-          remote_install_docker="$(printf '%q' "$PURRIVACY_INSTALL_DOCKER")"
           remote_secret_source_dir="$(printf '%q' "$PURRIVACY_SECRET_SOURCE_DIR")"
+          remote_env_file_b64="$(printf '%q' "$PURRIVACY_ENV_FILE_B64")"
+          remote_firebase_service_account_json_b64="$(printf '%q' "$PURRIVACY_FIREBASE_SERVICE_ACCOUNT_JSON_B64")"
           remote_deploy_image="$(printf '%q' "$PURRIVACY_DEPLOY_IMAGE")"
           remote_image_registry="$(printf '%q' "$PURRIVACY_IMAGE_REGISTRY")"
           remote_image_registry_user="$(printf '%q' "$PURRIVACY_IMAGE_REGISTRY_USER")"
           remote_image_registry_token="$(printf '%q' "$PURRIVACY_IMAGE_REGISTRY_TOKEN")"
 
           ssh -p "$VPS_PORT" -i ~/.ssh/purrivacy_deploy_key "$VPS_USER@$VPS_HOST" \
-            "PURRIVACY_REPO_URL=$remote_repo_url PURRIVACY_DEPLOY_BRANCH=$remote_branch PURRIVACY_INSTALL_DOCKER=$remote_install_docker PURRIVACY_SECRET_SOURCE_DIR=$remote_secret_source_dir PURRIVACY_DEPLOY_IMAGE=$remote_deploy_image PURRIVACY_IMAGE_REGISTRY=$remote_image_registry PURRIVACY_IMAGE_REGISTRY_USER=$remote_image_registry_user PURRIVACY_IMAGE_REGISTRY_TOKEN=$remote_image_registry_token bash -se" <<'REMOTE'
+            "PURRIVACY_REPO_URL=$remote_repo_url PURRIVACY_DEPLOY_BRANCH=$remote_branch PURRIVACY_SECRET_SOURCE_DIR=$remote_secret_source_dir PURRIVACY_ENV_FILE_B64=$remote_env_file_b64 PURRIVACY_FIREBASE_SERVICE_ACCOUNT_JSON_B64=$remote_firebase_service_account_json_b64 PURRIVACY_DEPLOY_IMAGE=$remote_deploy_image PURRIVACY_IMAGE_REGISTRY=$remote_image_registry PURRIVACY_IMAGE_REGISTRY_USER=$remote_image_registry_user PURRIVACY_IMAGE_REGISTRY_TOKEN=$remote_image_registry_token bash -se" <<'REMOTE'
           set -Eeuo pipefail
 
           require_apt_get() {
@@ -182,6 +185,32 @@ jobs:
             sudo apt-get install -y git ca-certificates
           fi
 
+          write_b64_file() {
+            local encoded="$1"
+            local path="$2"
+            local label="$3"
+            local tmp
+
+            if [[ -z "$encoded" ]]; then
+              echo "Missing GitHub environment secret: $label" >&2
+              exit 1
+            fi
+
+            tmp="$(mktemp)"
+            if ! printf '%s' "$encoded" | base64 -d > "$tmp"; then
+              rm -f "$tmp"
+              echo "Could not base64-decode GitHub environment secret: $label" >&2
+              exit 1
+            fi
+
+            sudo install -d -m 0700 "$(dirname "$path")"
+            sudo install -m 0600 "$tmp" "$path"
+            rm -f "$tmp"
+          }
+
+          write_b64_file "$PURRIVACY_ENV_FILE_B64" "$PURRIVACY_SECRET_SOURCE_DIR/.env" PURRIVACY_ENV_FILE_B64
+          write_b64_file "$PURRIVACY_FIREBASE_SERVICE_ACCOUNT_JSON_B64" "$PURRIVACY_SECRET_SOURCE_DIR/firebase-service-account.json" PURRIVACY_FIREBASE_SERVICE_ACCOUNT_JSON_B64
+
           tmp_dir="$(mktemp -d)"
           cleanup() {
             rm -rf "$tmp_dir"
@@ -190,17 +219,11 @@ jobs:
 
           git clone --depth 1 --branch "$PURRIVACY_DEPLOY_BRANCH" "$PURRIVACY_REPO_URL" "$tmp_dir"
 
-          install_flag=()
-          if [[ "$PURRIVACY_INSTALL_DOCKER" == "true" ]]; then
-            install_flag=(--install-docker)
-          fi
-
           sudo bash "$tmp_dir/scripts/deploy_purrivacy_docker.sh" \
             --repo-url "$PURRIVACY_REPO_URL" \
             --repo-branch "$PURRIVACY_DEPLOY_BRANCH" \
             --prebuilt-image "$PURRIVACY_DEPLOY_IMAGE" \
             --secrets-source-dir "$PURRIVACY_SECRET_SOURCE_DIR" \
             --force-secret-overwrite \
-            "${install_flag[@]}" \
             --start
           REMOTE

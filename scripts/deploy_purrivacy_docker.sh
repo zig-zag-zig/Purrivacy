@@ -35,7 +35,8 @@ Options:
   --repo-url URL                Git repo URL. Default: ${REPO_URL}.
   --app-dir PATH                Default: ${APP_DIR}.
   --app-user USER               Linux user that owns/runs the app. Default: ${APP_USER}.
-  --install-docker              Install Docker Engine + Compose plugin.
+  --install-docker              Force Docker Engine + Compose plugin install.
+                                Docker is installed automatically if missing.
   --start                       Build and start the Compose stack.
   --prebuilt-image IMAGE        Use this already-built app image and pull it
                                 instead of building on the VPS.
@@ -403,7 +404,9 @@ main() {
   as_root_or_sudo
   need_cmd git
 
-  if [[ "$INSTALL_DOCKER" == "true" ]]; then
+  if [[ "$INSTALL_DOCKER" == "true" ]] \
+    || ! command -v docker >/dev/null 2>&1 \
+    || ! docker compose version >/dev/null 2>&1; then
     install_docker
   fi
 

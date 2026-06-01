@@ -14,7 +14,21 @@ Purrivacy listens on port `3002` inside the container and Docker maps `127.0.0.1
 
 ## VPS Secrets
 
-Create this source directory once on the VPS:
+For GitHub Actions deploys, store the file contents in GitHub environment secrets and the workflow writes them to the VPS on each deploy.
+
+Configure these GitHub environment secrets in `production`:
+
+- `PURRIVACY_ENV_FILE_B64`: base64 of `.env.prod`.
+- `PURRIVACY_FIREBASE_SERVICE_ACCOUNT_JSON_B64`: base64 of `firebase-service-account.json`.
+
+Create the base64 values locally:
+
+```bash
+base64 -w 0 .env.prod
+base64 -w 0 secrets/prod/firebase-service-account.json
+```
+
+The workflow decodes them to:
 
 ```text
 /root/purrivacy-secrets/.env
@@ -69,12 +83,13 @@ Configure these GitHub environment or repository secrets:
 Configure these GitHub repository variables if needed:
 
 - `PURRIVACY_REPO_URL`: optional. Defaults to `https://github.com/<owner>/<repo>.git`.
-- `PURRIVACY_INSTALL_DOCKER`: optional. Set to `true` for the first deploy if Docker is not installed yet.
 - `PURRIVACY_SECRET_SOURCE_DIR`: optional. Defaults to `/root/purrivacy-secrets`.
 
 For a private repository, prefer setting `PURRIVACY_REPO_URL` to an SSH URL such as `git@github.com:zig-zag-zig/Purrivacy.git` and install the matching deploy key on the VPS, because the VPS performs the clone/pull.
 
 The workflow uses `GITHUB_TOKEN` to push and pull GHCR images, so repository workflow permissions must allow packages write access.
+
+Docker is installed automatically by the deploy script if the VPS is missing Docker or the Compose plugin.
 
 ## Manual VPS Deploy
 
@@ -86,18 +101,6 @@ sudo ./scripts/deploy_purrivacy_docker.sh \
   --repo-branch main \
   --secrets-source-dir /root/purrivacy-secrets \
   --force-secret-overwrite \
-  --start
-```
-
-First deploy on a VPS without Docker:
-
-```bash
-sudo ./scripts/deploy_purrivacy_docker.sh \
-  --repo-url https://github.com/zig-zag-zig/Purrivacy.git \
-  --repo-branch main \
-  --secrets-source-dir /root/purrivacy-secrets \
-  --force-secret-overwrite \
-  --install-docker \
   --start
 ```
 

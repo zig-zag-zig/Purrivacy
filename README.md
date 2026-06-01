@@ -125,15 +125,18 @@ PURRIVACY_VPS_HOST
 PURRIVACY_VPS_USER
 PURRIVACY_VPS_SSH_KEY
 PURRIVACY_VPS_PORT
+PURRIVACY_ENV_FILE_B64
+PURRIVACY_FIREBASE_SERVICE_ACCOUNT_JSON_B64
 ```
 
 Configure GitHub variables if needed:
 
 ```text
 PURRIVACY_REPO_URL
-PURRIVACY_INSTALL_DOCKER
 PURRIVACY_SECRET_SOURCE_DIR
 ```
+
+Create the base64 secret values locally with `base64 -w 0 .env.prod` and `base64 -w 0 secrets/prod/firebase-service-account.json`. Docker is installed automatically by the deploy script if the VPS is missing Docker or the Compose plugin.
 
 Manual deploy from a repo checkout on the VPS is still available:
 

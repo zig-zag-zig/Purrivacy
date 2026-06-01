@@ -275,13 +275,14 @@ sync_repo() {
   if [[ ! -d "$APP_DIR/.git" ]]; then
     log "Cloning $REPO_URL branch $REPO_BRANCH into $APP_DIR"
     rm -rf "$APP_DIR"
-    git clone --depth 1 --branch "$REPO_BRANCH" "$REPO_URL" "$APP_DIR"
+    install -d -m 0750 -o "$APP_USER" -g "$APP_USER" "$APP_DIR"
+    run_as_app_user git clone --depth 1 --branch "$REPO_BRANCH" "$REPO_URL" "$APP_DIR"
   else
     log "Updating $APP_DIR to $REPO_BRANCH"
-    git -C "$APP_DIR" remote set-url origin "$REPO_URL"
-    git -C "$APP_DIR" fetch --depth 1 origin "$REPO_BRANCH"
-    git -C "$APP_DIR" checkout -B "$REPO_BRANCH" "origin/$REPO_BRANCH"
-    git -C "$APP_DIR" reset --hard "origin/$REPO_BRANCH"
+    run_as_app_user git -C "$APP_DIR" remote set-url origin "$REPO_URL"
+    run_as_app_user git -C "$APP_DIR" fetch --depth 1 origin "$REPO_BRANCH"
+    run_as_app_user git -C "$APP_DIR" checkout -B "$REPO_BRANCH" "origin/$REPO_BRANCH"
+    run_as_app_user git -C "$APP_DIR" reset --hard "origin/$REPO_BRANCH"
   fi
 
   chown -R "$APP_USER:$APP_USER" "$APP_DIR"

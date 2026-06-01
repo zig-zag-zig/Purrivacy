@@ -189,7 +189,7 @@ npm start        # Run the compiled production server
 
 ## Branching And Releases
 
-Purrivacy currently uses a production-only branch flow:
+Purrivacy uses trunk-based development:
 
 - `main` is the protected production branch.
 - Pull requests into `main` run CI.
@@ -221,7 +221,7 @@ git switch -c hotfix/<short-name>
 
 Open the hotfix pull request into `main`. Once merged, it deploys through the same production pipeline.
 
-There is no `develop` or test deploy branch for Purrivacy right now. If test hosting is added later, mirror Pawify's flow with `develop` for test and `main` for production.
+There is no `develop` or test deploy branch for Purrivacy.
 
 ## API Overview
 

@@ -66,12 +66,12 @@ Pushes to `main` build and push a GHCR image, then deploy production. Manual wor
 
 Docker builds use Buildx with the GitHub Actions cache, so repeated PR and deploy builds can reuse unchanged Docker layers while still producing an image for the exact commit being checked or deployed.
 
-Branch flow:
+Trunk-based flow:
 
 - Work from `feature/<short-name>`, `fix/<short-name>`, or `hotfix/<short-name>` branches.
 - Open pull requests into `main`.
 - Keep `main` protected and production-ready.
-- There is no `develop` or test deploy branch for Purrivacy right now.
+- There is no `develop` or test deploy branch for Purrivacy.
 
 Configure these GitHub environment or repository secrets:
 

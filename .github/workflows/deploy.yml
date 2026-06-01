@@ -223,7 +223,5 @@ jobs:
             --repo-url "$PURRIVACY_REPO_URL" \
             --repo-branch "$PURRIVACY_DEPLOY_BRANCH" \
             --prebuilt-image "$PURRIVACY_DEPLOY_IMAGE" \
-            --secrets-source-dir "$PURRIVACY_SECRET_SOURCE_DIR" \
-            --force-secret-overwrite \
-            --start
+            --secrets-source-dir "$PURRIVACY_SECRET_SOURCE_DIR"
           REMOTE

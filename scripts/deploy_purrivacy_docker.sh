@@ -5,18 +5,18 @@ set -Eeuo pipefail
 #
 # Cloudflare Tunnel / reverse proxy is intentionally outside this Docker stack.
 # Existing host route should point to:
-#   prod: http://127.0.0.1:3002
+#   production: http://127.0.0.1:3002
 
-APP_DIR="${PURRIVACY_APP_DIR:-/srv/purrivacy}"
-APP_USER="${PURRIVACY_APP_USER:-purrivacy}"
+# This script is intentionally CI-shaped: GitHub Actions builds the app image,
+# writes secrets to the VPS, then this script pulls that image and starts the
+# single production Compose stack.
+
+APP_DIR="/srv/purrivacy"
+APP_USER="purrivacy"
 REPO_URL="${PURRIVACY_REPO_URL:-https://github.com/zig-zag-zig/Purrivacy.git}"
 REPO_BRANCH="${PURRIVACY_DEPLOY_BRANCH:-main}"
+PROD_BRANCH="main"
 COMPOSE_PROJECT="purrivacy"
-INSTALL_DOCKER="false"
-START_STACK="false"
-FORCE_SECRET_OVERWRITE="false"
-ENV_FILE_SOURCE=""
-FIREBASE_SERVICE_ACCOUNT_FILE_SOURCE=""
 SECRETS_SOURCE_DIR=""
 PREBUILT_IMAGE="${PURRIVACY_DEPLOY_IMAGE:-}"
 IMAGE_REGISTRY="${PURRIVACY_IMAGE_REGISTRY:-}"
@@ -34,28 +34,16 @@ Usage: $0 [options]
 Options:
   --repo-branch BRANCH          Git branch to checkout/pull. Default: ${REPO_BRANCH}.
   --repo-url URL                Git repo URL. Default: ${REPO_URL}.
-  --app-dir PATH                Default: ${APP_DIR}.
-  --app-user USER               Linux user that owns/runs the app. Default: ${APP_USER}.
-  --install-docker              Force Docker Engine + Compose plugin install.
-                                Docker is installed automatically if missing.
-  --start                       Build and start the Compose stack.
-  --prebuilt-image IMAGE        Use this already-built app image and pull it
-                                instead of building on the VPS.
-  --force-secret-overwrite      Overwrite env/secret files from provided sources/templates.
-  --env-file PATH               Copy this file to .env.prod.
-  --firebase-service-account-file PATH
-                                Copy this file to secrets/prod/firebase-service-account.json.
+  --prebuilt-image IMAGE        Required app image built by CI.
   --secrets-source-dir DIR      Read source files from DIR:
-                                  DIR/.env or DIR/.env.prod
+                                  DIR/.env.prod or DIR/.env
                                   DIR/firebase-service-account.json
   --help                        Show this help.
 
 Environment variables:
   PURRIVACY_REPO_URL            Optional repo URL override.
   PURRIVACY_DEPLOY_BRANCH       Optional branch override.
-  PURRIVACY_APP_DIR             Optional app directory override.
-  PURRIVACY_APP_USER            Optional app user override.
-  PURRIVACY_DEPLOY_IMAGE        Optional prebuilt app image. Usually set by CI.
+  PURRIVACY_DEPLOY_IMAGE        Required prebuilt app image. Usually set by CI.
   PURRIVACY_IMAGE_REGISTRY      Optional registry for docker login, e.g. ghcr.io.
   PURRIVACY_IMAGE_REGISTRY_USER Optional registry username.
   PURRIVACY_IMAGE_REGISTRY_TOKEN
@@ -64,23 +52,16 @@ Environment variables:
 Example:
   sudo ./scripts/deploy_purrivacy_docker.sh \\
     --repo-branch main \\
-    --secrets-source-dir /root/purrivacy-secrets \\
-    --start
+    --prebuilt-image ghcr.io/zig-zag-zig/purrivacy:sha-... \\
+    --secrets-source-dir /root/purrivacy-secrets
 USAGE
 }
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --app-dir) APP_DIR="$2"; shift 2 ;;
-    --app-user) APP_USER="$2"; shift 2 ;;
     --repo-url) REPO_URL="$2"; shift 2 ;;
     --repo-branch|--branch) REPO_BRANCH="$2"; shift 2 ;;
-    --install-docker) INSTALL_DOCKER="true"; shift ;;
-    --start) START_STACK="true"; shift ;;
     --prebuilt-image) PREBUILT_IMAGE="$2"; shift 2 ;;
-    --force-secret-overwrite) FORCE_SECRET_OVERWRITE="true"; shift ;;
-    --env-file) ENV_FILE_SOURCE="$2"; shift 2 ;;
-    --firebase-service-account-file) FIREBASE_SERVICE_ACCOUNT_FILE_SOURCE="$2"; shift 2 ;;
     --secrets-source-dir) SECRETS_SOURCE_DIR="$2"; shift 2 ;;
     --help|-h) usage; exit 0 ;;
     *) err "Unknown option: $1"; usage; exit 2 ;;
@@ -130,34 +111,6 @@ copy_source_file() {
   fi
 
   install -m "$mode" -o "${owner%%:*}" -g "${owner##*:}" "$src" "$dest"
-}
-
-write_file() {
-  local path="$1"
-  local mode="$2"
-  local owner="$3"
-  local tmp
-  tmp="$(mktemp)"
-  cat > "$tmp"
-
-  mkdir -p "$(dirname "$path")"
-
-  if [[ -f "$path" ]]; then
-    if [[ "$(sha_file "$path")" == "$(sha_file "$tmp")" ]]; then
-      log "unchanged: $path"
-      rm -f "$tmp"
-      chmod "$mode" "$path" || true
-      chown "$owner" "$path" || true
-      return 0
-    fi
-    cp -a "$path" "$path.bak.$(date -u +%Y%m%dT%H%M%SZ)"
-    log "updated with backup: $path"
-  else
-    log "created: $path"
-  fi
-
-  install -m "$mode" -o "${owner%%:*}" -g "${owner##*:}" "$tmp" "$path"
-  rm -f "$tmp"
 }
 
 read_env_value() {
@@ -259,6 +212,33 @@ EOF_REPO
   systemctl enable --now containerd
 }
 
+validate_args() {
+  if [[ -z "$REPO_BRANCH" ]]; then
+    err "--repo-branch or PURRIVACY_DEPLOY_BRANCH is required."
+    exit 2
+  fi
+
+  if [[ -z "$REPO_URL" ]]; then
+    err "--repo-url or PURRIVACY_REPO_URL is required."
+    exit 2
+  fi
+
+  if [[ "$REPO_BRANCH" != "$PROD_BRANCH" ]]; then
+    err "Refusing production deploy from branch '$REPO_BRANCH'. Expected '$PROD_BRANCH'."
+    exit 2
+  fi
+
+  if [[ -z "$PREBUILT_IMAGE" ]]; then
+    err "--prebuilt-image or PURRIVACY_DEPLOY_IMAGE is required. Build the image in CI before deploying."
+    exit 2
+  fi
+
+  if [[ -z "$SECRETS_SOURCE_DIR" ]]; then
+    err "--secrets-source-dir is required."
+    exit 2
+  fi
+}
+
 prepare_user_and_dirs() {
   if ! id "$APP_USER" >/dev/null 2>&1; then
     log "Creating system user: $APP_USER"
@@ -289,45 +269,25 @@ sync_repo() {
   chown -R "$APP_USER:$APP_USER" "$APP_DIR"
 }
 
-resolve_secret_sources() {
-  if [[ -n "$SECRETS_SOURCE_DIR" ]]; then
-    if [[ -z "$ENV_FILE_SOURCE" ]]; then
-      if [[ -f "$SECRETS_SOURCE_DIR/.env.prod" ]]; then
-        ENV_FILE_SOURCE="$SECRETS_SOURCE_DIR/.env.prod"
-      elif [[ -f "$SECRETS_SOURCE_DIR/.env" ]]; then
-        ENV_FILE_SOURCE="$SECRETS_SOURCE_DIR/.env"
-      fi
-    fi
-
-    if [[ -z "$FIREBASE_SERVICE_ACCOUNT_FILE_SOURCE" && -f "$SECRETS_SOURCE_DIR/firebase-service-account.json" ]]; then
-      FIREBASE_SERVICE_ACCOUNT_FILE_SOURCE="$SECRETS_SOURCE_DIR/firebase-service-account.json"
-    fi
-  fi
-}
-
 ensure_runtime_files() {
   local owner="$APP_USER:$APP_USER"
   local env_file="$APP_DIR/.env.prod"
   local secrets_dir="$APP_DIR/secrets/prod"
+  local env_source="$SECRETS_SOURCE_DIR/.env.prod"
+  local firebase_source="$SECRETS_SOURCE_DIR/firebase-service-account.json"
 
   install -d -m 0755 -o "$APP_USER" -g "$APP_USER" "$APP_DIR/secrets" "$secrets_dir"
 
-  resolve_secret_sources
-
-  if [[ -n "$ENV_FILE_SOURCE" ]]; then
-    if [[ ! -f "$env_file" || "$FORCE_SECRET_OVERWRITE" == "true" ]]; then
-      copy_source_file "$ENV_FILE_SOURCE" "$env_file" 0600 "$owner"
-    else
-      warn "$env_file already exists; not overwriting without --force-secret-overwrite"
-    fi
-  elif [[ ! -f "$env_file" ]]; then
-    write_file "$env_file" 0600 "$owner" < "$APP_DIR/.env.prod.example"
-    warn "Created $env_file from example. Fill real secrets before starting."
+  if [[ ! -f "$env_source" && -f "$SECRETS_SOURCE_DIR/.env" ]]; then
+    env_source="$SECRETS_SOURCE_DIR/.env"
   fi
+
+  copy_source_file "$env_source" "$env_file" 0600 "$owner"
+  copy_source_file "$firebase_source" "$secrets_dir/firebase-service-account.json" 0644 "$owner"
 
   replace_or_append_env "$env_file" COMPOSE_PROJECT_NAME "$COMPOSE_PROJECT"
   replace_or_append_env "$env_file" PURRIVACY_ENV_FILE .env.prod
-  replace_or_append_env "$env_file" PURRIVACY_IMAGE "${PREBUILT_IMAGE:-purrivacy:prod}"
+  replace_or_append_env "$env_file" PURRIVACY_IMAGE "$PREBUILT_IMAGE"
   replace_or_append_env "$env_file" PURRIVACY_SECRETS_DIR ./secrets/prod
   replace_or_append_env "$env_file" PURRIVACY_HOST_BIND_ADDRESS 127.0.0.1
   replace_or_append_env "$env_file" PURRIVACY_HOST_PORT 3002
@@ -343,14 +303,6 @@ ensure_runtime_files() {
   replace_or_append_env "$env_file" APP_ENV production
   replace_or_append_env "$env_file" NODE_ENV production
   replace_or_append_env "$env_file" GOOGLE_APPLICATION_CREDENTIALS /var/purrivacy/secrets/firebase-service-account.json
-
-  if [[ -n "$FIREBASE_SERVICE_ACCOUNT_FILE_SOURCE" ]]; then
-    if [[ ! -f "$secrets_dir/firebase-service-account.json" || "$FORCE_SECRET_OVERWRITE" == "true" ]]; then
-      copy_source_file "$FIREBASE_SERVICE_ACCOUNT_FILE_SOURCE" "$secrets_dir/firebase-service-account.json" 0644 "$owner"
-    else
-      warn "$secrets_dir/firebase-service-account.json already exists; not overwriting without --force-secret-overwrite"
-    fi
-  fi
 
   chmod 0755 "$APP_DIR/secrets" "$secrets_dir" 2>/dev/null || true
   chmod 0644 "$secrets_dir/firebase-service-account.json" 2>/dev/null || true
@@ -431,26 +383,20 @@ start_stack() {
   docker_registry_login
   compose_cmd config >/dev/null
 
-  if [[ -n "$PREBUILT_IMAGE" ]]; then
-    log "Pulling prebuilt image: $PREBUILT_IMAGE"
-    compose_cmd pull purrivacy
-    stop_existing_stack
-    compose_cmd up -d --no-build
-  else
-    compose_cmd build purrivacy
-    stop_existing_stack
-    compose_cmd up -d
-  fi
+  log "Pulling prebuilt image: $PREBUILT_IMAGE"
+  compose_cmd pull purrivacy
+  stop_existing_stack
+  compose_cmd up -d --no-build
 
   compose_cmd ps
 }
 
 main() {
+  validate_args
   as_root_or_sudo
   need_cmd git
 
-  if [[ "$INSTALL_DOCKER" == "true" ]] \
-    || ! command -v docker >/dev/null 2>&1 \
+  if ! command -v docker >/dev/null 2>&1 \
     || ! docker compose version >/dev/null 2>&1; then
     install_docker
   fi
@@ -461,14 +407,9 @@ main() {
   sync_repo
   ensure_runtime_files
   validate_runtime_files
+  start_stack
 
-  if [[ "$START_STACK" == "true" ]]; then
-    start_stack
-  else
-    log "Prepared $APP_DIR. Re-run with --start to build and start Docker."
-  fi
-
-  log "Purrivacy deployment preparation complete."
+  log "Purrivacy deployment complete."
 }
 
 main "$@"

@@ -93,23 +93,15 @@ Docker is installed automatically by the deploy script if the VPS is missing Doc
 
 ## Manual VPS Deploy
 
-From a repo checkout on the VPS:
+The normal deploy path is GitHub Actions. A manual VPS run is only useful when
+you already have a GHCR image tag to deploy:
 
 ```bash
 sudo ./scripts/deploy_purrivacy_docker.sh \
   --repo-url https://github.com/zig-zag-zig/Purrivacy.git \
   --repo-branch main \
-  --secrets-source-dir /root/purrivacy-secrets \
-  --force-secret-overwrite \
-  --start
-```
-
-If PM2 currently owns port `3002`, stop it before starting Docker:
-
-```bash
-pm2 stop purrivacy
-pm2 delete purrivacy
-pm2 save
+  --prebuilt-image ghcr.io/zig-zag-zig/purrivacy:sha-<commit-sha> \
+  --secrets-source-dir /root/purrivacy-secrets
 ```
 
 ## Health Check

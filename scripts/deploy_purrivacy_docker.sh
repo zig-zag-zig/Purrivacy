@@ -308,7 +308,7 @@ ensure_runtime_files() {
   local env_file="$APP_DIR/.env.prod"
   local secrets_dir="$APP_DIR/secrets/prod"
 
-  install -d -m 0700 -o "$APP_USER" -g "$APP_USER" "$secrets_dir"
+  install -d -m 0755 -o "$APP_USER" -g "$APP_USER" "$APP_DIR/secrets" "$secrets_dir"
 
   resolve_secret_sources
 
@@ -325,11 +325,15 @@ ensure_runtime_files() {
 
   if [[ -n "$FIREBASE_SERVICE_ACCOUNT_FILE_SOURCE" ]]; then
     if [[ ! -f "$secrets_dir/firebase-service-account.json" || "$FORCE_SECRET_OVERWRITE" == "true" ]]; then
-      copy_source_file "$FIREBASE_SERVICE_ACCOUNT_FILE_SOURCE" "$secrets_dir/firebase-service-account.json" 0600 "$owner"
+      copy_source_file "$FIREBASE_SERVICE_ACCOUNT_FILE_SOURCE" "$secrets_dir/firebase-service-account.json" 0644 "$owner"
     else
       warn "$secrets_dir/firebase-service-account.json already exists; not overwriting without --force-secret-overwrite"
     fi
   fi
+
+  chmod 0755 "$APP_DIR/secrets" "$secrets_dir" 2>/dev/null || true
+  chmod 0644 "$secrets_dir/firebase-service-account.json" 2>/dev/null || true
+  chown -R "$owner" "$APP_DIR/secrets" || true
 }
 
 validate_runtime_files() {

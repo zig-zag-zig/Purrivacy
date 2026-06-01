@@ -37,10 +37,10 @@ npm install
 Create your local environment file:
 
 ```bash
-cp .env.example .env
+cp .env.local.example .env
 ```
 
-Update `.env` with your Firebase and runtime settings. At minimum, provide:
+Update `.env` with your Firebase and runtime settings. For a bare Node run, point Firebase at a host path instead of the Docker container path. At minimum, provide:
 
 ```env
 AUTH_EMAIL_DOMAIN=purr.ivacy
@@ -60,7 +60,7 @@ Start the development server:
 npm run dev
 ```
 
-The API defaults to `http://localhost:5000`.
+With the example env file, the API runs at `http://localhost:3002`. Without `PORT`, the app default is `5000`.
 
 ## Docker
 
@@ -69,10 +69,10 @@ Purrivacy can run as its own small Docker Compose project. Keep it separate from
 For local Docker:
 
 ```bash
-cp .env.prod.example .env.local
+cp .env.local.example .env.local
 ```
 
-Edit `.env.local` and set:
+Keep these Docker-local values:
 
 ```env
 COMPOSE_PROJECT_NAME=purrivacy-local

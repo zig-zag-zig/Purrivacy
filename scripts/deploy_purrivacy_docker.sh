@@ -162,8 +162,15 @@ write_file() {
 read_env_value() {
   local file="$1"
   local key="$2"
-  if [[ -f "$file" ]]; then
-    grep "^${key}=" "$file" | head -n1 | cut -d= -f2-
+  local line
+
+  if [[ ! -f "$file" ]]; then
+    return 0
+  fi
+
+  line="$(grep -m1 "^${key}=" "$file" || true)"
+  if [[ -n "$line" ]]; then
+    printf '%s\n' "${line#*=}"
   fi
 }
 

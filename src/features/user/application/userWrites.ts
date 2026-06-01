@@ -1,9 +1,9 @@
 import { db } from '../../../infrastructure/firebase';
-import { Encryption, EncryptionBase } from '../../../core/types';
 import { BadRequestError, ConflictError } from '../../../utils/errors';
 import { createLogger } from '../../../utils/logger';
 import { NotificationService } from '../../notification/application/NotificationService';
 import { UserDataSecurity } from '../domain/UserDataSecurity';
+import { deleteUserEncryptedKeys, replaceUserEncryptedKeys } from '../infrastructure/UserKeyRepository';
 import { getUserRef, getUserWithFieldMask } from '../infrastructure/UserRepository';
 import { deleteUserPushTokensFromDb } from '../../notification/infrastructure/pushTokenStore';
 
@@ -25,7 +25,18 @@ export const createUser = async (
     }
 
     const sanitizedUser = UserDataSecurity.sanitizeUserForCreate(user);
-    await userRef.create(sanitizedUser);
+    const { keys, ...userDocument } = sanitizedUser;
+    await userRef.create(userDocument);
+
+    try {
+        await replaceUserEncryptedKeys(userId, keys);
+    } catch (error) {
+        await userRef.delete().catch((deleteError) => (
+            logger.warn('failed to roll back user after key storage failure', { userId, deleteError })
+        ));
+        throw error;
+    }
+
     notifyUserDataChanged(userId);
     return { success: true };
 };
@@ -37,16 +48,16 @@ export const updateUserField = async (
 ): Promise<{ success: boolean }> => {
     await getUserWithFieldMask(userId, ['mfaEnabled']);
 
-    let sanitizedValue: Encryption | EncryptionBase[];
     if (fieldName === 'dekPassword') {
-        sanitizedValue = UserDataSecurity.sanitizeEncryption(value, 'dekPassword');
+        const sanitizedValue = UserDataSecurity.sanitizeEncryption(value, 'dekPassword');
+        await getUserRef(userId).update({ [fieldName]: sanitizedValue });
     } else if (fieldName === 'keys') {
-        sanitizedValue = UserDataSecurity.sanitizeEncryptedKeys(value);
+        const sanitizedKeys = UserDataSecurity.sanitizeEncryptedKeys(value);
+        await replaceUserEncryptedKeys(userId, sanitizedKeys);
     } else {
         throw new BadRequestError('Unsupported user field update');
     }
 
-    await getUserRef(userId).update({ [fieldName]: sanitizedValue });
     notifyUserDataChanged(userId);
     return { success: true };
 };
@@ -57,5 +68,8 @@ export const deleteUser = async (userId: string): Promise<void> => {
     batch.delete(userRef.collection('security').doc('mfa'));
     batch.delete(userRef);
     await batch.commit();
-    await deleteUserPushTokensFromDb(userId);
+    await Promise.all([
+        deleteUserEncryptedKeys(userId),
+        deleteUserPushTokensFromDb(userId),
+    ]);
 };

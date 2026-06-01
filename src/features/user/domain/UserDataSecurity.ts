@@ -1,8 +1,12 @@
 import { Encryption, EncryptionBase, User, UserEncryptedData } from '../../../core/types';
+import {
+    MAX_DEK_ENCRYPTED_DATA_LENGTH,
+    MAX_ENCRYPTED_KEY_DATA_LENGTH,
+    MAX_ENCRYPTED_KEYS_TRANSFER_LENGTH,
+    MAX_KEYS_PER_USER,
+} from '../../../core/constants';
 import { BadRequestError } from '../../../utils/errors';
 
-const MAX_KEYS_PER_USER = 200;
-const MAX_ENCRYPTED_DATA_LENGTH = 1_000_000;
 const HEX_RE = /^[0-9a-f]+$/i;
 const BASE64_RE = /^[A-Za-z0-9+/]*={0,2}$/;
 const RECOVERY_VERIFIER_SALT_BYTES = 16;
@@ -37,8 +41,8 @@ function assertHex(value: unknown, name: string, expectedBytes: number): string 
     return stringValue;
 }
 
-function assertBase64(value: unknown, name: string): string {
-    const stringValue = assertString(value, name, MAX_ENCRYPTED_DATA_LENGTH);
+function assertBase64(value: unknown, name: string, maxLength: number): string {
+    const stringValue = assertString(value, name, maxLength);
     if (!BASE64_RE.test(stringValue) || stringValue.length % 4 !== 0) {
         throw new BadRequestError(`${name} has an invalid format`);
     }
@@ -46,12 +50,24 @@ function assertBase64(value: unknown, name: string): string {
     return stringValue;
 }
 
+function encryptedBaseLength(value: EncryptionBase): number {
+    return value.encryptedData.length + value.iv.length + value.tag.length;
+}
+
+function encryptedLength(value: Encryption): number {
+    return encryptedBaseLength(value) + value.salt.length;
+}
+
 export class UserDataSecurity {
-    static sanitizeEncryptionBase(value: unknown, name: string): EncryptionBase {
+    static sanitizeEncryptionBase(
+        value: unknown,
+        name: string,
+        maxEncryptedDataLength = MAX_ENCRYPTED_KEY_DATA_LENGTH,
+    ): EncryptionBase {
         const record = assertRecord(value, name);
 
         return {
-            encryptedData: assertBase64(record.encryptedData, `${name}.encryptedData`),
+            encryptedData: assertBase64(record.encryptedData, `${name}.encryptedData`, maxEncryptedDataLength),
             iv: assertHex(record.iv, `${name}.iv`, 12),
             tag: assertHex(record.tag, `${name}.tag`, 16),
         };
@@ -59,7 +75,7 @@ export class UserDataSecurity {
 
     static sanitizeEncryption(value: unknown, name: string): Encryption {
         const record = assertRecord(value, name);
-        const base = UserDataSecurity.sanitizeEncryptionBase(record, name);
+        const base = UserDataSecurity.sanitizeEncryptionBase(record, name, MAX_DEK_ENCRYPTED_DATA_LENGTH);
 
         return {
             ...base,
@@ -76,19 +92,37 @@ export class UserDataSecurity {
             throw new BadRequestError('Too many keys');
         }
 
-        return value.map((key, index) => (
-            UserDataSecurity.sanitizeEncryptionBase(key, `keys[${index}]`)
+        const sanitizedKeys = value.map((key, index) => (
+            UserDataSecurity.sanitizeEncryptionBase(key, `keys[${index}]`, MAX_ENCRYPTED_KEY_DATA_LENGTH)
         ));
+
+        const totalLength = sanitizedKeys.reduce(
+            (total, key) => total + encryptedBaseLength(key),
+            0,
+        );
+        if (totalLength > MAX_ENCRYPTED_KEYS_TRANSFER_LENGTH) {
+            throw new BadRequestError('Encrypted keys payload is too large');
+        }
+
+        return sanitizedKeys;
     }
 
     static sanitizeUserEncryptedData(value: unknown): UserEncryptedData {
         const record = assertRecord(value, 'userData');
+        const dekPassword = UserDataSecurity.sanitizeEncryption(record.dekPassword, 'dekPassword');
+        const dekSeed = UserDataSecurity.sanitizeEncryption(record.dekSeed, 'dekSeed');
+        const keys = UserDataSecurity.sanitizeEncryptedKeys(record.keys);
 
-        return {
-            dekPassword: UserDataSecurity.sanitizeEncryption(record.dekPassword, 'dekPassword'),
-            dekSeed: UserDataSecurity.sanitizeEncryption(record.dekSeed, 'dekSeed'),
-            keys: UserDataSecurity.sanitizeEncryptedKeys(record.keys),
-        };
+        if (
+            encryptedLength(dekPassword)
+            + encryptedLength(dekSeed)
+            + keys.reduce((total, key) => total + encryptedBaseLength(key), 0)
+            > MAX_ENCRYPTED_KEYS_TRANSFER_LENGTH + (MAX_DEK_ENCRYPTED_DATA_LENGTH * 2)
+        ) {
+            throw new BadRequestError('User encrypted payload is too large');
+        }
+
+        return { dekPassword, dekSeed, keys };
     }
 
     static sanitizeUserForCreate(value: unknown): User {

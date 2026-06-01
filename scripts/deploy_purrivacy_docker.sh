@@ -11,6 +11,7 @@ APP_DIR="${PURRIVACY_APP_DIR:-/srv/purrivacy}"
 APP_USER="${PURRIVACY_APP_USER:-purrivacy}"
 REPO_URL="${PURRIVACY_REPO_URL:-https://github.com/zig-zag-zig/Purrivacy.git}"
 REPO_BRANCH="${PURRIVACY_DEPLOY_BRANCH:-main}"
+COMPOSE_PROJECT="purrivacy"
 INSTALL_DOCKER="false"
 START_STACK="false"
 FORCE_SECRET_OVERWRITE="false"
@@ -324,6 +325,25 @@ ensure_runtime_files() {
     warn "Created $env_file from example. Fill real secrets before starting."
   fi
 
+  replace_or_append_env "$env_file" COMPOSE_PROJECT_NAME "$COMPOSE_PROJECT"
+  replace_or_append_env "$env_file" PURRIVACY_ENV_FILE .env.prod
+  replace_or_append_env "$env_file" PURRIVACY_IMAGE "${PREBUILT_IMAGE:-purrivacy:prod}"
+  replace_or_append_env "$env_file" PURRIVACY_SECRETS_DIR ./secrets/prod
+  replace_or_append_env "$env_file" PURRIVACY_HOST_BIND_ADDRESS 127.0.0.1
+  replace_or_append_env "$env_file" PURRIVACY_HOST_PORT 3002
+  replace_or_append_env "$env_file" PURRIVACY_LOG_MAX_SIZE 10m
+  replace_or_append_env "$env_file" PURRIVACY_LOG_MAX_FILE 3
+  replace_or_append_env "$env_file" PURRIVACY_MEMORY_LIMIT 256m
+  replace_or_append_env "$env_file" PURRIVACY_MEMORY_SWAP_LIMIT 384m
+  replace_or_append_env "$env_file" PURRIVACY_MEMORY_RESERVATION 64m
+  replace_or_append_env "$env_file" PURRIVACY_CPUS 0.5
+  replace_or_append_env "$env_file" PURRIVACY_PIDS_LIMIT 128
+  replace_or_append_env "$env_file" PURRIVACY_NODE_OPTIONS --max-old-space-size=128
+  replace_or_append_env "$env_file" PORT 3002
+  replace_or_append_env "$env_file" APP_ENV production
+  replace_or_append_env "$env_file" NODE_ENV production
+  replace_or_append_env "$env_file" GOOGLE_APPLICATION_CREDENTIALS /var/purrivacy/secrets/firebase-service-account.json
+
   if [[ -n "$FIREBASE_SERVICE_ACCOUNT_FILE_SOURCE" ]]; then
     if [[ ! -f "$secrets_dir/firebase-service-account.json" || "$FORCE_SECRET_OVERWRITE" == "true" ]]; then
       copy_source_file "$FIREBASE_SERVICE_ACCOUNT_FILE_SOURCE" "$secrets_dir/firebase-service-account.json" 0644 "$owner"
@@ -396,20 +416,33 @@ docker_registry_login() {
   printf '%s\n' "$IMAGE_REGISTRY_TOKEN" | run_as_app_user docker login "$IMAGE_REGISTRY" -u "$IMAGE_REGISTRY_USER" --password-stdin >/dev/null
 }
 
+compose_cmd() {
+  run_as_app_user docker compose -p "$COMPOSE_PROJECT" --env-file "$APP_DIR/.env.prod" -f "$APP_DIR/docker-compose.yml" "$@"
+}
+
+stop_existing_stack() {
+  log "Stopping existing $COMPOSE_PROJECT Compose stack if present"
+  compose_cmd down --remove-orphans || true
+}
+
 start_stack() {
   log "Starting Purrivacy Docker stack"
 
   docker_registry_login
+  compose_cmd config >/dev/null
 
   if [[ -n "$PREBUILT_IMAGE" ]]; then
     log "Pulling prebuilt image: $PREBUILT_IMAGE"
-    run_as_app_user docker compose --env-file "$APP_DIR/.env.prod" -f "$APP_DIR/docker-compose.yml" pull purrivacy
-    run_as_app_user docker compose --env-file "$APP_DIR/.env.prod" -f "$APP_DIR/docker-compose.yml" up -d --no-build
+    compose_cmd pull purrivacy
+    stop_existing_stack
+    compose_cmd up -d --no-build
   else
-    run_as_app_user docker compose --env-file "$APP_DIR/.env.prod" -f "$APP_DIR/docker-compose.yml" up -d --build
+    compose_cmd build purrivacy
+    stop_existing_stack
+    compose_cmd up -d
   fi
 
-  run_as_app_user docker compose --env-file "$APP_DIR/.env.prod" -f "$APP_DIR/docker-compose.yml" ps
+  compose_cmd ps
 }
 
 main() {

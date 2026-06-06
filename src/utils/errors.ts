@@ -1,0 +1,67 @@
+/**
+ * Custom error classes for consistent error handling
+ */
+
+import { AuthErrorResponse } from "../core/types";
+
+export class AppError<T extends object = Record<string, unknown>> extends Error {
+    public readonly statusCode: number;
+    public readonly details?: T;
+
+    constructor(message: string, statusCode: number, details?: T) {
+        super(message);
+        this.statusCode = statusCode;
+        this.details = details;
+
+        Object.setPrototypeOf(this, new.target.prototype);
+        Error.captureStackTrace(this, this.constructor);
+    }
+}
+
+export class BadRequestError extends AppError {
+    constructor(message: string = 'Bad Request', details?: Record<string, unknown>) {
+        super(message, 400, details);
+    }
+}
+
+export class NotFoundError extends AppError {
+    constructor(message: string = 'Not Found', details?: Record<string, unknown>) {
+        super(message, 404, details);
+    }
+}
+
+export class ConflictError extends AppError {
+    constructor(message: string = 'Conflict', details?: Record<string, unknown>) {
+        super(message, 409, details);
+    }
+}
+
+export class RateLimitError extends AppError {
+    constructor(message: string = 'Too Many Requests', details?: Record<string, unknown>) {
+        super(message, 429, details);
+    }
+}
+
+export class AuthError extends AppError<AuthErrorResponse> {
+    constructor(message: string, sessionError: AuthErrorResponse, statusCode: 403 | 401) {
+        super(message, statusCode, sessionError);
+    }
+}
+
+export class MfaAlreadyEnabledError extends ConflictError {
+    constructor(details?: Record<string, unknown>) {
+        super('MFA is already enabled for this user', details);
+    }
+}
+
+export class MfaSetupExpiredError extends BadRequestError {
+    constructor(details?: Record<string, unknown>) {
+        super('MFA setup expired. Please start again.', details);
+    }
+}
+
+export class MfaNotEnabledError extends BadRequestError {
+    constructor(details?: Record<string, unknown>) {
+        super('MFA is not enabled for this user', details);
+    }
+}

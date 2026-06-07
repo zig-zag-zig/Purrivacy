@@ -1,10 +1,11 @@
 name: ${COMPOSE_PROJECT_NAME:-purrivacy}
 
 x-purrivacy-logging: &purrivacy-logging
-  driver: json-file
+  driver: local
   options:
-    max-size: ${PURRIVACY_LOG_MAX_SIZE:-10m}
-    max-file: ${PURRIVACY_LOG_MAX_FILE:-3}
+    max-size: ${PURRIVACY_LOG_MAX_SIZE:-2m}
+    max-file: ${PURRIVACY_LOG_MAX_FILE:-30}
+    compress: ${PURRIVACY_LOG_COMPRESS:-true}
 
 services:
   purrivacy:

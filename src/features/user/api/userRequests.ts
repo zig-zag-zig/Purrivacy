@@ -1,30 +1,15 @@
 import { BadRequestError } from '../../../utils/errors';
+import {
+    requireBodyString,
+    requireBodyValue,
+} from '../../../api/http/requestParsing';
 
-const requireBodyValue = (body: any, field: string): unknown => {
-    const value = body?.[field];
-    if (!value) {
-        throw new BadRequestError(`${field} is required`);
-    }
-
-    return value;
+export const parseCreateUserRequest = (body: unknown): unknown => {
+    return requireBodyValue(body, 'userData');
 };
 
-export const parseCreateUserRequest = (body: any): unknown => {
-    const userData = body?.userData;
-    if (!userData) {
-        throw new BadRequestError('userData is required');
-    }
-
-    return userData;
-};
-
-export const parseKeyRecordRequest = (body: any): unknown => {
-    const key = body?.key;
-    if (!key) {
-        throw new BadRequestError('key is required');
-    }
-
-    return key;
+export const parseKeyRecordRequest = (body: unknown): unknown => {
+    return requireBodyValue(body, 'key');
 };
 
 export const parseKeyRecordIdParam = (recordId: unknown): string => {
@@ -35,31 +20,23 @@ export const parseKeyRecordIdParam = (recordId: unknown): string => {
     return recordId;
 };
 
-export const parseChangePasswordRequest = (body: any): unknown => {
+export const parseChangePasswordRequest = (body: unknown): unknown => {
     return requireBodyValue(body, 'dekPassword');
 };
 
 export const parseSavePushTokenRequest = (
-    body: any,
+    body: unknown,
     deviceId?: string,
 ): { pushToken: string; deviceId: string } => {
-    const pushToken = requireBodyValue(body, 'pushToken');
-    if (typeof pushToken !== 'string') {
-        throw new BadRequestError('pushToken must be a string');
-    }
+    const pushToken = requireBodyString(body, 'pushToken');
 
     if (typeof deviceId !== 'string' || !deviceId.trim()) {
-        throw new BadRequestError('x-device-id in header is required');
+        throw new BadRequestError('X-Device-ID header is required');
     }
 
     return { pushToken, deviceId };
 };
 
-export const parseDeletePushTokenRequest = (body: any): string => {
-    const pushToken = requireBodyValue(body, 'pushToken');
-    if (typeof pushToken !== 'string') {
-        throw new BadRequestError('pushToken must be a string');
-    }
-
-    return pushToken;
+export const parseDeletePushTokenRequest = (body: unknown): string => {
+    return requireBodyString(body, 'pushToken');
 };

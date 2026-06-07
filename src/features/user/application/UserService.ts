@@ -1,10 +1,15 @@
 import {
-    EncryptionBase,
+    EncryptedPayload,
     User,
     UserEncryptedData,
     UserEncryptedKeyRecordsResponse,
 } from '../../../core/types';
-import { createUser, deleteUser, updateUserField } from './userWrites';
+import {
+    changeDekPassword,
+    createUser,
+    deleteUser,
+    queueUserMfaEnabledUpdate,
+} from './userWrites';
 import { deleteUserPushToken, saveUserPushToken } from './userPushTokens';
 import { getEncryptedUser, getUser, getUserMfaState } from './userReads';
 import {
@@ -15,8 +20,8 @@ import {
 } from '../infrastructure/UserKeyRepository';
 
 const flattenKeyRecord = (
-    record: { recordId: string; key: EncryptionBase },
-): EncryptionBase & { recordId: string } => ({
+    record: { recordId: string; key: EncryptedPayload },
+): EncryptedPayload & { recordId: string } => ({
     recordId: record.recordId,
     ...record.key,
 });
@@ -41,12 +46,19 @@ export class UserService {
         return createUser(user, userId);
     }
 
-    static async updateField(
+    static async changeDekPassword(
         userId: string,
-        fieldName: string,
-        value: any,
+        value: unknown,
     ): Promise<{ success: boolean }> {
-        return updateUserField(userId, fieldName, value);
+        return changeDekPassword(userId, value);
+    }
+
+    static queueMfaEnabledUpdate(
+        batch: FirebaseFirestore.WriteBatch,
+        userId: string,
+        mfaEnabled: boolean,
+    ): void {
+        queueUserMfaEnabledUpdate(batch, userId, mfaEnabled);
     }
 
     static async deleteUser(userId: string): Promise<void> {
@@ -79,16 +91,16 @@ export class UserService {
 
     static async addEncryptedKeyRecord(
         userId: string,
-        key: EncryptionBase,
-    ): Promise<EncryptionBase & { recordId: string }> {
+        key: EncryptedPayload,
+    ): Promise<EncryptedPayload & { recordId: string }> {
         return flattenKeyRecord(await addUserEncryptedKeyRecord(userId, key));
     }
 
     static async updateEncryptedKeyRecord(
         userId: string,
         recordId: string,
-        key: EncryptionBase,
-    ): Promise<EncryptionBase & { recordId: string }> {
+        key: EncryptedPayload,
+    ): Promise<EncryptedPayload & { recordId: string }> {
         return flattenKeyRecord(await updateUserEncryptedKeyRecord(userId, recordId, key));
     }
 

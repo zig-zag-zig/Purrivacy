@@ -1,8 +1,8 @@
 import { db } from '../../../infrastructure/firebase';
-import { BadRequestError, ConflictError } from '../../../utils/errors';
+import { ConflictError } from '../../../utils/errors';
 import { createLogger } from '../../../utils/logger';
 import { NotificationService } from '../../notification/application/NotificationService';
-import { UserDataSecurity } from '../domain/UserDataSecurity';
+import { EncryptedUserDataValidator } from '../domain/EncryptedUserDataValidator';
 import { deleteUserEncryptedKeys, initializeUserEncryptedKeyRecords } from '../infrastructure/UserKeyRepository';
 import { getUserRef, getUserWithFieldMask } from '../infrastructure/UserRepository';
 import { deleteUserPushTokensFromDb } from '../../notification/infrastructure/pushTokenStore';
@@ -12,6 +12,14 @@ const logger = createLogger('features.user.writes');
 const notifyUserDataChanged = (userId: string): void => {
     void NotificationService.sendDataOnlyNotification(userId, 'user')
         .catch((error) => logger.warn('user update notification failed', { userId, error }));
+};
+
+export const queueUserMfaEnabledUpdate = (
+    batch: FirebaseFirestore.WriteBatch,
+    userId: string,
+    mfaEnabled: boolean,
+): void => {
+    batch.update(getUserRef(userId), { mfaEnabled });
 };
 
 export const createUser = async (
@@ -24,7 +32,7 @@ export const createUser = async (
         throw new ConflictError('User already exists');
     }
 
-    const sanitizedUser = UserDataSecurity.sanitizeUserForCreate(user);
+    const sanitizedUser = EncryptedUserDataValidator.sanitizeUserForCreate(user);
     const { keys, ...userDocument } = sanitizedUser;
     await userRef.create(userDocument);
 
@@ -41,19 +49,14 @@ export const createUser = async (
     return { success: true };
 };
 
-export const updateUserField = async (
+export const changeDekPassword = async (
     userId: string,
-    fieldName: string,
-    value: any,
+    value: unknown,
 ): Promise<{ success: boolean }> => {
     await getUserWithFieldMask(userId, ['mfaEnabled']);
 
-    if (fieldName === 'dekPassword') {
-        const sanitizedValue = UserDataSecurity.sanitizeEncryption(value, 'dekPassword');
-        await getUserRef(userId).update({ [fieldName]: sanitizedValue });
-    } else {
-        throw new BadRequestError('Unsupported user field update');
-    }
+    const sanitizedValue = EncryptedUserDataValidator.sanitizeSaltedEncryptedPayload(value, 'dekPassword');
+    await getUserRef(userId).update({ dekPassword: sanitizedValue });
 
     notifyUserDataChanged(userId);
     return { success: true };

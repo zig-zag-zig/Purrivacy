@@ -26,7 +26,7 @@ describe('UserKeyRepository', () => {
     const repository = loadRepository();
     const userPath = encodedUserId('user-1');
 
-    await expect(repository.readUserEncryptedKeyRecords('user-1')).resolves.toEqual([]);
+    await expect(repository.readUserEncryptedKeyRecordSet('user-1')).resolves.toEqual({ keys: [] });
     expect(mockRealtimeDatabase.data.userKeys[userPath]).toMatchObject({
       count: 0,
       items: {},

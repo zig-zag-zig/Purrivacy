@@ -1,4 +1,4 @@
-import { Encryption, EncryptionBase, User, UserEncryptedData } from '../../../core/types';
+import { SaltedEncryptedPayload, EncryptedPayload, User, UserEncryptedData } from '../../../core/types';
 import {
     MAX_DEK_ENCRYPTED_DATA_LENGTH,
     MAX_ENCRYPTED_KEY_DATA_LENGTH,
@@ -50,20 +50,20 @@ function assertBase64(value: unknown, name: string, maxLength: number): string {
     return stringValue;
 }
 
-function encryptedBaseLength(value: EncryptionBase): number {
+function encryptedBaseLength(value: EncryptedPayload): number {
     return value.encryptedData.length + value.iv.length + value.tag.length;
 }
 
-function encryptedLength(value: Encryption): number {
+function encryptedLength(value: SaltedEncryptedPayload): number {
     return encryptedBaseLength(value) + value.salt.length;
 }
 
-export class UserDataSecurity {
-    static sanitizeEncryptionBase(
+export class EncryptedUserDataValidator {
+    static sanitizeEncryptedPayload(
         value: unknown,
         name: string,
         maxEncryptedDataLength = MAX_ENCRYPTED_KEY_DATA_LENGTH,
-    ): EncryptionBase {
+    ): EncryptedPayload {
         const record = assertRecord(value, name);
 
         return {
@@ -73,9 +73,9 @@ export class UserDataSecurity {
         };
     }
 
-    static sanitizeEncryption(value: unknown, name: string): Encryption {
+    static sanitizeSaltedEncryptedPayload(value: unknown, name: string): SaltedEncryptedPayload {
         const record = assertRecord(value, name);
-        const base = UserDataSecurity.sanitizeEncryptionBase(record, name, MAX_DEK_ENCRYPTED_DATA_LENGTH);
+        const base = EncryptedUserDataValidator.sanitizeEncryptedPayload(record, name, MAX_DEK_ENCRYPTED_DATA_LENGTH);
 
         return {
             ...base,
@@ -83,11 +83,11 @@ export class UserDataSecurity {
         };
     }
 
-    static sanitizeEncryptedKeyRecord(value: unknown, name = 'key'): EncryptionBase {
-        return UserDataSecurity.sanitizeEncryptionBase(value, name, MAX_ENCRYPTED_KEY_DATA_LENGTH);
+    static sanitizeEncryptedKeyRecord(value: unknown, name = 'key'): EncryptedPayload {
+        return EncryptedUserDataValidator.sanitizeEncryptedPayload(value, name, MAX_ENCRYPTED_KEY_DATA_LENGTH);
     }
 
-    static sanitizeEncryptedKeys(value: unknown): EncryptionBase[] {
+    static sanitizeEncryptedKeys(value: unknown): EncryptedPayload[] {
         if (!Array.isArray(value)) {
             throw new BadRequestError('keys must be an array');
         }
@@ -97,7 +97,7 @@ export class UserDataSecurity {
         }
 
         const sanitizedKeys = value.map((key, index) => (
-            UserDataSecurity.sanitizeEncryptionBase(key, `keys[${index}]`, MAX_ENCRYPTED_KEY_DATA_LENGTH)
+            EncryptedUserDataValidator.sanitizeEncryptedPayload(key, `keys[${index}]`, MAX_ENCRYPTED_KEY_DATA_LENGTH)
         ));
 
         const totalLength = sanitizedKeys.reduce(
@@ -113,9 +113,9 @@ export class UserDataSecurity {
 
     static sanitizeUserEncryptedData(value: unknown): UserEncryptedData {
         const record = assertRecord(value, 'userData');
-        const dekPassword = UserDataSecurity.sanitizeEncryption(record.dekPassword, 'dekPassword');
-        const dekSeed = UserDataSecurity.sanitizeEncryption(record.dekSeed, 'dekSeed');
-        const keys = UserDataSecurity.sanitizeEncryptedKeys(record.keys);
+        const dekPassword = EncryptedUserDataValidator.sanitizeSaltedEncryptedPayload(record.dekPassword, 'dekPassword');
+        const dekSeed = EncryptedUserDataValidator.sanitizeSaltedEncryptedPayload(record.dekSeed, 'dekSeed');
+        const keys = EncryptedUserDataValidator.sanitizeEncryptedKeys(record.keys);
 
         if (
             encryptedLength(dekPassword)
@@ -132,7 +132,7 @@ export class UserDataSecurity {
     static sanitizeUserForCreate(value: unknown): User {
         const record = assertRecord(value, 'userData');
         return {
-            ...UserDataSecurity.sanitizeUserEncryptedData(record),
+            ...EncryptedUserDataValidator.sanitizeUserEncryptedData(record),
             recoveryVerifierSalt: assertHex(record.recoveryVerifierSalt, 'recoveryVerifierSalt', RECOVERY_VERIFIER_SALT_BYTES),
             recoveryVerifierHash: assertHex(record.recoveryVerifierHash, 'recoveryVerifierHash', RECOVERY_VERIFIER_HASH_BYTES),
             mfaEnabled: false,

@@ -1,16 +1,15 @@
 import { db } from '../../../infrastructure/firebase';
 
-const usersCollection = db.collection('users');
-
-export const getUserRef = (userId: string) => {
-    return usersCollection.doc(userId);
-};
+const mfaSetupCollection = db.collection('mfaSetup');
 
 export const getMfaSecurityRef = (userId: string) => {
-    return getUserRef(userId).collection('security').doc('mfa');
+    return db.collection('users').doc(userId).collection('security').doc('mfa');
 };
 
 export const getMfaSetupRef = (userId: string) => {
-    return db.collection('mfaSetup').doc(userId);
+    return mfaSetupCollection.doc(userId);
 };
 
+export const getMfaSetupCollection = () => {
+    return mfaSetupCollection;
+};

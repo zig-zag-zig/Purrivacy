@@ -10,7 +10,8 @@ import {
 } from '../../../utils/errors';
 import { createLogger } from '../../../utils/logger';
 import { NotificationService } from '../../notification/application/NotificationService';
-import { getMfaSecurityRef, getMfaSetupRef, getUserRef } from './mfaRefs';
+import { UserService } from '../../user/application/UserService';
+import { getMfaSecurityRef, getMfaSetupRef } from './mfaRefs';
 import { verifyMfaTotp } from './mfaTotp';
 
 const logger = createLogger('features.mfa.enable');
@@ -48,7 +49,7 @@ export const verifyAndEnableMfa = async (
     }
 
     const batch = db.batch();
-    batch.update(getUserRef(userId), { mfaEnabled: true });
+    UserService.queueMfaEnabledUpdate(batch, userId, true);
     batch.set(getMfaSecurityRef(userId), {
         mfaSecret: setupData.encryptedSecret,
         mfaSecretIv: setupData.iv,

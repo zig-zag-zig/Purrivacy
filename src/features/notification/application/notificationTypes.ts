@@ -4,7 +4,6 @@ export type SendNotificationOptions = {
     title?: string;
     body?: string;
     eventName?: string;
-    payload?: Record<string, any>;
+    payload?: Record<string, unknown>;
     excludeDeviceId?: string;
 };
-

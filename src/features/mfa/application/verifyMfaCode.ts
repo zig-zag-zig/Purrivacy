@@ -1,12 +1,8 @@
-import { env } from '../../../config/env';
-import { UserMfaSecurity } from '../../../core/types';
-import { CryptoUtils } from '../../../utils/cryptoUtils';
-import { AuthError, MfaNotEnabledError } from '../../../utils/errors';
-import { UserService } from '../../user/application/UserService';
+import { AuthError } from '../../../utils/errors';
 import { getInvalidMfaError } from './mfaErrors';
-import { getMfaSecurityRef } from './mfaRefs';
-import { verifyMfaTotp } from './mfaTotp';
+import { getMfaCodeKind } from './mfaCodeFormats';
 import { verifyAndConsumeRecoveryCode } from './mfaRecoveryCodes';
+import { verifyMfaTotpCode } from './verifyMfaTotpCode';
 
 export const verifyMfaCode = async (
     userId: string,
@@ -18,10 +14,9 @@ export const verifyMfaCode = async (
     }
 
     const normalizedMfaCode = mfaCode.trim();
-    const isRecoveryCodeFormat = /^[A-Z0-9]{12}$/.test(normalizedMfaCode);
-    const isTotpCodeFormat = /^\d{6}$/.test(normalizedMfaCode);
+    const codeKind = getMfaCodeKind(normalizedMfaCode);
 
-    if (isRecoveryCodeFormat) {
+    if (codeKind === 'recovery') {
         const recoveryCodesResult = await verifyAndConsumeRecoveryCode(userId, normalizedMfaCode);
         if (!recoveryCodesResult.valid) {
             throw getInvalidMfaError(isSensitive);
@@ -29,27 +24,12 @@ export const verifyMfaCode = async (
         return recoveryCodesResult.newRecoveryCodes;
     }
 
-    if (!isTotpCodeFormat) {
+    if (codeKind !== 'totp') {
         throw getInvalidMfaError(isSensitive);
     }
 
-    const { mfaEnabled } = await UserService.getUserMfaState(userId);
-    if (!mfaEnabled) {
-        throw new MfaNotEnabledError();
-    }
-
-    const mfaSecurityDoc = await getMfaSecurityRef(userId).get();
-    const mfaSecurity = mfaSecurityDoc.data() as UserMfaSecurity | undefined;
-    if (mfaSecurity?.mfaSecret && mfaSecurity.mfaSecretIv && mfaSecurity.mfaSecretTag) {
-        const secret = CryptoUtils.decryptSecret(
-            mfaSecurity.mfaSecret,
-            mfaSecurity.mfaSecretIv,
-            mfaSecurity.mfaSecretTag,
-            env.mfaKek,
-        );
-        if (verifyMfaTotp(secret, normalizedMfaCode)) {
-            return undefined;
-        }
+    if (await verifyMfaTotpCode(userId, normalizedMfaCode)) {
+        return undefined;
     }
 
     throw getInvalidMfaError(isSensitive);

@@ -7,7 +7,7 @@ export class NotificationService {
     static async sendDataOnlyNotification(
         userId: string,
         eventName: string,
-        payload?: Record<string, any>,
+        payload?: Record<string, unknown>,
         options?: { excludeDeviceId?: string },
     ): Promise<void> {
         await sendPushNotification(userId, {
@@ -17,4 +17,3 @@ export class NotificationService {
         });
     }
 }
-

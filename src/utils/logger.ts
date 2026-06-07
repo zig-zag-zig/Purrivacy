@@ -88,7 +88,3 @@ export const createLogger = (scope: string) => ({
     error: (message: string, meta?: Record<string, unknown>) => write(scope, 'error', message, meta),
     child: (childScope: string) => createLogger(`${scope}.${childScope}`),
 });
-
-export const logger = {
-    ...createLogger('app'),
-};

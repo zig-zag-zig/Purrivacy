@@ -1,5 +1,6 @@
 import { createRateLimiter } from '../rate-limit/createRateLimiter';
 import { rateLimitKeys } from '../rate-limit/rateLimitKeys';
+import { apiMessages } from '../http/apiMessages';
 
 const MINUTE = 60 * 1000;
 
@@ -10,7 +11,7 @@ export const rateLimiter = {
         maxRequests: 5,
         keyGenerator: rateLimitKeys.byUser(true),
         skipSuccessfulRequests: true,
-        message: 'Too many MFA verification attempts. Please try again later.',
+        message: apiMessages.rateLimit.mfaVerification,
     }),
 
     authentication: createRateLimiter({
@@ -18,14 +19,14 @@ export const rateLimiter = {
         windowMs: 60 * MINUTE,
         maxRequests: 10,
         keyGenerator: rateLimitKeys.byUsername(),
-        message: 'Too many authentication attempts. Please try again later.',
+        message: apiMessages.rateLimit.authentication,
     }),
 
     general: createRateLimiter({
         name: 'general',
         windowMs: 15 * MINUTE,
         maxRequests: 100,
-        message: 'Too many requests. Please slow down.',
+        message: apiMessages.rateLimit.default,
     }),
 
     authenticatedRead: createRateLimiter({
@@ -33,7 +34,7 @@ export const rateLimiter = {
         windowMs: 15 * MINUTE,
         maxRequests: 120,
         keyGenerator: rateLimitKeys.byUser(),
-        message: 'Too many requests. Please slow down.',
+        message: apiMessages.rateLimit.default,
     }),
 
     authenticatedWrite: createRateLimiter({
@@ -41,7 +42,7 @@ export const rateLimiter = {
         windowMs: 15 * MINUTE,
         maxRequests: 30,
         keyGenerator: rateLimitKeys.byUser(),
-        message: 'Too many updates. Please slow down.',
+        message: apiMessages.rateLimit.updates,
     }),
 
     sessionCreation: createRateLimiter({
@@ -54,14 +55,14 @@ export const rateLimiter = {
             const details = res.locals.errorDetails;
             return res.statusCode === 403 && details?.mfaRequired === true && details?.wrongMfaCode !== true;
         },
-        message: 'Too many login attempts. Please try again later.',
+        message: apiMessages.rateLimit.login,
     }),
 
     sessionCreationIp: createRateLimiter({
         name: 'sessionCreationIp',
         windowMs: 15 * MINUTE,
         maxRequests: 30,
-        message: 'Too many login attempts. Please try again later.',
+        message: apiMessages.rateLimit.login,
     }),
 
     sessionRefresh: createRateLimiter({
@@ -70,7 +71,7 @@ export const rateLimiter = {
         maxRequests: 20,
         keyGenerator: rateLimitKeys.byRefreshToken(),
         skipSuccessfulRequests: true,
-        message: 'Too many session refresh attempts. Please try again later.',
+        message: apiMessages.rateLimit.sessionRefresh,
     }),
 
     sensitiveOperations: createRateLimiter({
@@ -78,7 +79,7 @@ export const rateLimiter = {
         windowMs: 15 * MINUTE,
         maxRequests: 5,
         keyGenerator: rateLimitKeys.byUser(true),
-        message: 'Too many sensitive operations. Please try again later.',
+        message: apiMessages.rateLimit.sensitiveOperations,
     }),
 
     create: createRateLimiter,

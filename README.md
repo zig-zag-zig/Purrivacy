@@ -66,26 +66,14 @@ With the example env file, the API runs at `http://localhost:3002`. Without `POR
 
 Purrivacy can run as its own small Docker Compose project. Keep it separate from Pawify so each app can deploy, restart, roll back, and tune memory without affecting the other one.
 
-For local Docker:
+For first-time local Docker setup:
 
 ```bash
 cp .env.local.example .env.local
+mkdir -p secrets/local
 ```
 
-Keep these Docker-local values:
-
-```env
-COMPOSE_PROJECT_NAME=purrivacy-local
-PURRIVACY_ENV_FILE=.env.local
-PURRIVACY_IMAGE=purrivacy:local
-PURRIVACY_SECRETS_DIR=./secrets/local
-PURRIVACY_HOST_BIND_ADDRESS=127.0.0.1
-PURRIVACY_HOST_PORT=3002
-APP_ENV=local
-NODE_ENV=production
-SENTRY_ENABLED=false
-GOOGLE_APPLICATION_CREDENTIALS=/var/purrivacy/secrets/firebase-service-account.json
-```
+Edit `.env.local` with your local Firebase/runtime values and set `MFA_KEK` to the output of `openssl rand -hex 32`.
 
 Put the Firebase service account here:
 
@@ -93,10 +81,16 @@ Put the Firebase service account here:
 secrets/local/firebase-service-account.json
 ```
 
+Allow the non-root container to read the mounted credential file:
+
+```bash
+chmod 755 secrets/local && chmod 644 secrets/local/firebase-service-account.json
+```
+
 Then run:
 
 ```bash
-docker compose --env-file .env.local up -d --build
+docker compose --env-file .env.local up -d --build --wait
 curl http://127.0.0.1:3002/v1/health
 ```
 
@@ -107,6 +101,28 @@ npm run test:docker:local
 ```
 
 Purrivacy local Docker binds `127.0.0.1:3002`. Pawify local Docker uses a different local port, so both backend containers can run at the same time.
+
+To stop local Docker:
+
+```bash
+docker compose --env-file .env.local down
+```
+
+### Docker Logs
+
+Follow recent local logs:
+
+```bash
+docker compose --env-file .env.local logs -f --tail=100 purrivacy
+```
+
+Show available logs from the last 14 days:
+
+```bash
+docker compose --env-file .env.local logs --since=336h purrivacy
+```
+
+For production, use the same commands with `.env.prod`. Docker's disk-efficient `local` logging driver rotates compressed logs in 2 MB chunks, keeps `30` files, and removes the oldest file when the limit is reached. This caps logs at roughly 60 MB before compression. Docker's built-in file drivers cannot guarantee 14 days of retention: `--since=336h` shows any retained logs from that period, but high log volume can rotate them sooner.
 
 For the VPS, create ignored files:
 
@@ -172,6 +188,7 @@ After Docker is healthy, the VPS tunnel can keep pointing at `http://127.0.0.1:3
 ```bash
 npm run dev      # Start the TypeScript dev server
 npm test         # Run the Jest test suite
+npm run typecheck # Run TypeScript without emitting files
 npm run build    # Compile TypeScript into lib/
 npm start        # Run the compiled production server
 ```
@@ -242,7 +259,7 @@ All current routes are available under `/v1`.
 | `POST` | `/v1/mfa/recovery-codes/regenerate` | Regenerate MFA recovery codes |
 | `GET` | `/v1/mfa/recovery-codes/remaining` | Get remaining recovery code count |
 
-Authenticated endpoints expect a Bearer token in the `Authorization` header. Device-aware session and push-token flows may also require `x-device-id`.
+Authenticated endpoints expect a Bearer token in the `Authorization` header. Device-aware session and push-token flows may also require `X-Device-ID`.
 
 ## Testing
 
@@ -250,6 +267,12 @@ Run the fast backend test suite:
 
 ```bash
 npm test
+```
+
+Run the non-emitting TypeScript check:
+
+```bash
+npm run typecheck
 ```
 
 Run the full backend verification, including Firebase emulator integration tests:
@@ -260,7 +283,7 @@ npm run verify
 
 Purrivacy Firebase emulator tests use `127.0.0.1:9099`, `127.0.0.1:8080`, and `127.0.0.1:9000`.
 
-The current tests cover session request parsing, refresh-token/session security helpers, rate-limit key construction, user key records, and related edge cases without writing to a live Firebase project.
+The current tests cover HTTP response helpers, session request parsing, refresh-token/session security helpers, rate-limit key construction, encrypted user data validation, user key records, and related edge cases without writing to a live Firebase project.
 
 ## Production Notes
 

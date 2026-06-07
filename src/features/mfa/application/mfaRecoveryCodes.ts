@@ -2,9 +2,9 @@ import { AUTO_REGENERATE_THRESHOLD, RECOVERY_CODE_COUNT } from '../../../core/co
 import { UserMfaSecurity } from '../../../core/types';
 import { db } from '../../../infrastructure/firebase';
 import { CryptoUtils } from '../../../utils/cryptoUtils';
-import { MfaNotEnabledError, NotFoundError } from '../../../utils/errors';
+import { MfaNotEnabledError } from '../../../utils/errors';
 import { UserService } from '../../user/application/UserService';
-import { getMfaSecurityRef, getUserRef } from './mfaRefs';
+import { getMfaSecurityRef } from './mfaRefs';
 
 export const regenerateMfaRecoveryCodes = async (userId: string): Promise<string[]> => {
     const { mfaEnabled } = await UserService.getUserMfaState(userId);
@@ -41,24 +41,22 @@ export const verifyAndConsumeRecoveryCode = async (
     userId: string,
     code: string,
 ): Promise<{ valid: boolean; newRecoveryCodes?: string[] }> => {
+    const { mfaEnabled } = await UserService.getUserMfaState(userId);
+    if (!mfaEnabled) {
+        return { valid: false };
+    }
+
     const hashedCode = CryptoUtils.sha256(code);
-    const userRef = getUserRef(userId);
     const mfaSecurityRef = getMfaSecurityRef(userId);
 
     return await db.runTransaction(async (transaction) => {
-        const userDoc = await transaction.get(userRef);
-        if (!userDoc.exists) {
-            throw new NotFoundError('User not found');
-        }
-
         const mfaSecurityDoc = await transaction.get(mfaSecurityRef);
-        const userData = userDoc.data()!;
         const mfaSecurity = mfaSecurityDoc.data() as UserMfaSecurity | undefined;
         const storedCodes = Array.isArray(mfaSecurity?.mfaRecoveryCodes)
             ? mfaSecurity.mfaRecoveryCodes
             : [];
 
-        if (!userData.mfaEnabled || !mfaSecurityDoc.exists || storedCodes.length === 0) {
+        if (!mfaSecurityDoc.exists || storedCodes.length === 0) {
             return { valid: false };
         }
 

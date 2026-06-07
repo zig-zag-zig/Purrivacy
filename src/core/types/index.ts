@@ -1,22 +1,20 @@
 export interface UserEncryptedData {
-    dekPassword: Encryption;
-    dekSeed: Encryption;
-    keys: EncryptionBase[];
+    dekPassword: SaltedEncryptedPayload;
+    dekSeed: SaltedEncryptedPayload;
+    keys: EncryptedPayload[];
 }
-
-export type EncryptedKeyRecord = EncryptionBase;
 
 export interface EncryptedKeyRecordWithId {
     recordId: string;
-    key: EncryptedKeyRecord;
+    key: EncryptedPayload;
 }
 
 export interface UserEncryptedKeyRecordsResponse {
-    keys: Array<EncryptedKeyRecord & { recordId: string }>;
+    keys: Array<EncryptedPayload & { recordId: string }>;
 }
 
 export interface UserRecoveryEncryptedData {
-    dekSeed: Encryption;
+    dekSeed: SaltedEncryptedPayload;
 }
 
 export interface User extends UserEncryptedData {
@@ -32,11 +30,11 @@ export interface UserMfaSecurity {
     mfaRecoveryCodes: string[]; // Array of hashed recovery codes
 }
 
-export interface Encryption extends EncryptionBase {
+export interface SaltedEncryptedPayload extends EncryptedPayload {
     salt: string;
 }
 
-export interface EncryptionBase {
+export interface EncryptedPayload {
     encryptedData: string;
     iv: string;
     tag: string;
@@ -55,7 +53,7 @@ export interface SessionResponse {
     mfaEnabled: boolean;
 }
 
-export interface AuthErrorResponse {
+export interface AuthErrorDetails {
     sessionHeaderMissing?: boolean;
     deviceHeaderMissing?: boolean;
     bearerHeaderMissing?: boolean;

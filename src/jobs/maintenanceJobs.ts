@@ -1,4 +1,5 @@
-import { SessionRevocationService } from '../features/session/application/SessionRevocationService';
+import { cleanupExpiredMfaSetups } from '../features/mfa/application/expiredMfaSetupCleanup';
+import { cleanupExpiredSessionRecords } from '../features/session/application/expiredSessionCleanup';
 import { createLogger } from '../utils/logger';
 
 const logger = createLogger('jobs.maintenance');
@@ -6,8 +7,8 @@ const logger = createLogger('jobs.maintenance');
 let maintenanceInterval: NodeJS.Timeout | null = null;
 
 const runMaintenance = () => {
-    SessionRevocationService.cleanupExpiredSessions().catch((error) => logger.error('expired session cleanup failed', { error }));
-    SessionRevocationService.cleanupExpiredMfaSetups().catch((error) => logger.error('expired mfa setup cleanup failed', { error }));
+    cleanupExpiredSessionRecords().catch((error) => logger.error('expired session cleanup failed', { error }));
+    cleanupExpiredMfaSetups().catch((error) => logger.error('expired mfa setup cleanup failed', { error }));
 };
 
 export const startMaintenanceJobs = (): void => {

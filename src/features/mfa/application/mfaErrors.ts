@@ -1,8 +1,8 @@
-import { AuthErrorResponse } from '../../../core/types';
+import { AuthErrorDetails } from '../../../core/types';
 import { AuthError } from '../../../utils/errors';
 
 export const getInvalidMfaError = (isSensitive: boolean): AuthError => {
-    const authErrorResponse: AuthErrorResponse = {
+    const authErrorResponse: AuthErrorDetails = {
         wrongMfaCode: true,
     };
     if (isSensitive) {

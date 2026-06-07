@@ -1,5 +1,5 @@
 import { User, UserEncryptedData } from '../../../core/types';
-import { UserDataSecurity } from '../domain/UserDataSecurity';
+import { EncryptedUserDataValidator } from '../domain/EncryptedUserDataValidator';
 import { readUserEncryptedKeys } from '../infrastructure/UserKeyRepository';
 import { getUserDoc, getUserWithFieldMask } from '../infrastructure/UserRepository';
 
@@ -18,5 +18,5 @@ export const getUserMfaState = async (userId: string): Promise<{ mfaEnabled: boo
 export const getEncryptedUser = async (userId: string): Promise<UserEncryptedData> => {
     const doc = await getUserWithFieldMask(userId, ['dekPassword', 'dekSeed']);
     const keys = await readUserEncryptedKeys(userId);
-    return UserDataSecurity.sanitizeUserEncryptedData({ ...doc.data(), keys });
+    return EncryptedUserDataValidator.sanitizeUserEncryptedData({ ...doc.data(), keys });
 };

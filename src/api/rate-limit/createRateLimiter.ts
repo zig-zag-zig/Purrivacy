@@ -1,11 +1,14 @@
+import { OutgoingHttpHeader, OutgoingHttpHeaders } from 'http';
 import { Request, Response, NextFunction } from 'express';
 import { RateLimitError } from '../../utils/errors';
 import { createLogger } from '../../utils/logger';
+import { apiMessages } from '../http/apiMessages';
 import { getClientIp } from './clientIp';
 import { rateLimitKeys } from './rateLimitKeys';
 import { RateLimitConfig, RateLimitEntry } from './rateLimitTypes';
 
 const logger = createLogger('api.rateLimit');
+type WriteHeadHeaders = OutgoingHttpHeaders | OutgoingHttpHeader[];
 
 const cleanupExpiredEntries = (store: Map<string, RateLimitEntry>): void => {
     const now = Date.now();
@@ -41,8 +44,8 @@ const throwLimitExceeded = (
         method: req.method,
         path: req.path,
         ip: getClientIp(req),
-        userId: (req as any).userId,
-        hasDeviceId: Boolean((req as any).deviceId || req.headers['x-device-id']),
+        userId: req.userId,
+        hasDeviceId: Boolean(req.deviceId || req.headers['x-device-id']),
         retryAfter,
         limit: config.maxRequests,
         windowSeconds: config.windowMs / 1000,
@@ -51,7 +54,7 @@ const throwLimitExceeded = (
     res.setHeader('Retry-After', retryAfter.toString());
     setHeaders(res, config, entry, 0);
 
-    throw new RateLimitError(config.message || 'Too many requests', {
+    throw new RateLimitError(config.message || apiMessages.rateLimit.default, {
         retryAfter,
         limit: config.maxRequests,
         window: config.windowMs / 1000,
@@ -67,14 +70,24 @@ const attachResponseAdjustment = (
     entry: RateLimitEntry,
 ): void => {
     let adjustedCount = entry.count;
-    const originalWriteHead = res.writeHead;
+    const originalWriteHead = res.writeHead.bind(res);
 
-    res.writeHead = function (statusCode: number, headers?: any): any {
+    res.writeHead = ((
+        statusCode: number,
+        statusMessageOrHeaders?: string | WriteHeadHeaders,
+        headers?: WriteHeadHeaders,
+    ): Response => {
         setHeaders(res, config, entry, config.maxRequests - adjustedCount);
-        return headers === undefined
-            ? originalWriteHead.call(this, statusCode)
-            : originalWriteHead.call(this, statusCode, headers);
-    };
+        if (typeof statusMessageOrHeaders === 'string') {
+            return headers === undefined
+                ? originalWriteHead(statusCode, statusMessageOrHeaders)
+                : originalWriteHead(statusCode, statusMessageOrHeaders, headers);
+        }
+
+        return statusMessageOrHeaders === undefined
+            ? originalWriteHead(statusCode)
+            : originalWriteHead(statusCode, statusMessageOrHeaders);
+    }) as Response['writeHead'];
 
     res.once('finish', () => {
         const shouldSkip =

@@ -1,4 +1,9 @@
 import { BadRequestError } from '../../../utils/errors';
+import {
+    getBearerToken,
+    getBodyValue,
+    parseOptionalTrimmedString,
+} from '../../../api/http/requestParsing';
 
 export type CreateSessionBody = {
     mfaCode?: string;
@@ -12,43 +17,10 @@ const MAX_SESSION_LABEL_LENGTH = 120;
 const MAX_SESSION_PLATFORM_LENGTH = 64;
 const MFA_CODE_RE = /^(\d{6}|[A-Z0-9]{12})$/;
 
-export const getBearerToken = (authHeader: string | undefined): string | undefined => {
-    if (!authHeader?.startsWith('Bearer ')) {
-        return undefined;
-    }
+export { getBearerToken };
 
-    const token = authHeader.split('Bearer ')[1]?.trim();
-    return token || undefined;
-};
-
-const parseOptionalString = (
-    body: any,
-    field: string,
-    maxLength: number,
-): string | undefined => {
-    const value = body?.[field];
-    if (value === undefined || value === null) {
-        return undefined;
-    }
-
-    if (typeof value !== 'string') {
-        throw new BadRequestError(`${field} must be a string`);
-    }
-
-    const normalized = value.trim();
-    if (!normalized) {
-        return undefined;
-    }
-
-    if (normalized.length > maxLength) {
-        throw new BadRequestError(`${field} is too long`);
-    }
-
-    return normalized;
-};
-
-const parseOptionalMfaCode = (body: any): string | undefined => {
-    const mfaCode = parseOptionalString(body, 'mfaCode', 12);
+const parseOptionalMfaCode = (body: unknown): string | undefined => {
+    const mfaCode = parseOptionalTrimmedString(body, 'mfaCode', 12);
     if (mfaCode !== undefined && !MFA_CODE_RE.test(mfaCode)) {
         throw new BadRequestError('mfaCode has an invalid format');
     }
@@ -56,21 +28,22 @@ const parseOptionalMfaCode = (body: any): string | undefined => {
     return mfaCode;
 };
 
-export const parseCreateSessionRequest = (body: any): CreateSessionBody => {
+export const parseCreateSessionRequest = (body: unknown): CreateSessionBody => {
     return {
         mfaCode: parseOptionalMfaCode(body),
-        mfaTrusted: body?.mfaTrusted === true,
-        label: parseOptionalString(body, 'label', MAX_SESSION_LABEL_LENGTH),
-        platform: parseOptionalString(body, 'platform', MAX_SESSION_PLATFORM_LENGTH),
+        mfaTrusted: getBodyValue(body, 'mfaTrusted') === true,
+        label: parseOptionalTrimmedString(body, 'label', MAX_SESSION_LABEL_LENGTH),
+        platform: parseOptionalTrimmedString(body, 'platform', MAX_SESSION_PLATFORM_LENGTH),
     };
 };
 
-export const parseRefreshSessionRequest = (body: any): string => {
-    if (typeof body?.refreshToken !== 'string' || !body.refreshToken.trim()) {
+export const parseRefreshSessionRequest = (body: unknown): string => {
+    const refreshTokenValue = getBodyValue(body, 'refreshToken');
+    if (typeof refreshTokenValue !== 'string' || !refreshTokenValue.trim()) {
         throw new BadRequestError('refreshToken is required');
     }
 
-    const refreshToken = body.refreshToken.trim();
+    const refreshToken = refreshTokenValue.trim();
     if (refreshToken.length > MAX_REFRESH_TOKEN_LENGTH) {
         throw new BadRequestError('refreshToken is too long');
     }
@@ -78,28 +51,31 @@ export const parseRefreshSessionRequest = (body: any): string => {
     return refreshToken;
 };
 
-export const parseRecoveryChallengeRequest = (body: any): string => {
-    if (typeof body?.username !== 'string' || !body.username.trim()) {
+export const parseRecoveryChallengeRequest = (body: unknown): string => {
+    const username = getBodyValue(body, 'username');
+    if (typeof username !== 'string' || !username.trim()) {
         throw new BadRequestError('username is required');
     }
 
-    return body.username;
+    return username;
 };
 
-export const parseRecoveryTokenRequest = (body: any): {
+export const parseRecoveryTokenRequest = (body: unknown): {
     username: string;
     recoveryVerifier: string;
 } => {
-    if (typeof body?.username !== 'string' || !body.username.trim()) {
+    const username = getBodyValue(body, 'username');
+    if (typeof username !== 'string' || !username.trim()) {
         throw new BadRequestError('username is required');
     }
 
-    if (typeof body?.recoveryVerifier !== 'string' || !body.recoveryVerifier.trim()) {
+    const recoveryVerifier = getBodyValue(body, 'recoveryVerifier');
+    if (typeof recoveryVerifier !== 'string' || !recoveryVerifier.trim()) {
         throw new BadRequestError('recoveryVerifier is required');
     }
 
     return {
-        username: body.username,
-        recoveryVerifier: body.recoveryVerifier,
+        username,
+        recoveryVerifier,
     };
 };

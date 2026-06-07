@@ -3,7 +3,7 @@ import {
   MAX_ENCRYPTED_KEY_DATA_LENGTH,
   MAX_ENCRYPTED_KEYS_TRANSFER_LENGTH,
 } from '../src/core/constants';
-import { UserDataSecurity } from '../src/features/user/domain/UserDataSecurity';
+import { EncryptedUserDataValidator } from '../src/features/user/domain/EncryptedUserDataValidator';
 import { BadRequestError } from '../src/utils/errors';
 
 const base64 = (length: number): string => 'A'.repeat(length);
@@ -19,9 +19,9 @@ const encrypted = (encryptedDataLength: number) => ({
   salt: 'c'.repeat(32),
 });
 
-describe('UserDataSecurity', () => {
+describe('EncryptedUserDataValidator', () => {
   it('rejects oversized encrypted key records before storage writes', () => {
-    expect(() => UserDataSecurity.sanitizeEncryptedKeys([
+    expect(() => EncryptedUserDataValidator.sanitizeEncryptedKeys([
       encryptedBase(MAX_ENCRYPTED_KEY_DATA_LENGTH + 4),
     ])).toThrow(BadRequestError);
   });
@@ -29,7 +29,7 @@ describe('UserDataSecurity', () => {
   it('rejects oversized total encrypted key payloads', () => {
     const keyDataLength = Math.floor((MAX_ENCRYPTED_KEYS_TRANSFER_LENGTH / 3) / 4) * 4;
 
-    expect(() => UserDataSecurity.sanitizeEncryptedKeys([
+    expect(() => EncryptedUserDataValidator.sanitizeEncryptedKeys([
       encryptedBase(keyDataLength),
       encryptedBase(keyDataLength),
       encryptedBase(keyDataLength),
@@ -38,20 +38,20 @@ describe('UserDataSecurity', () => {
   });
 
   it('accepts encrypted key payloads that fit RTDB-backed transfer limits', () => {
-    expect(UserDataSecurity.sanitizeEncryptedKeys([
+    expect(EncryptedUserDataValidator.sanitizeEncryptedKeys([
       encryptedBase(900_000),
     ])).toHaveLength(1);
   });
 
   it('keeps DEK encrypted records small', () => {
-    expect(() => UserDataSecurity.sanitizeEncryption(
+    expect(() => EncryptedUserDataValidator.sanitizeSaltedEncryptedPayload(
       encrypted(MAX_DEK_ENCRYPTED_DATA_LENGTH + 4),
       'dekPassword',
     )).toThrow(BadRequestError);
   });
 
   it('accepts a compact create-user encrypted payload', () => {
-    expect(UserDataSecurity.sanitizeUserForCreate({
+    expect(EncryptedUserDataValidator.sanitizeUserForCreate({
       dekPassword: encrypted(44),
       dekSeed: encrypted(44),
       keys: [encryptedBase(128)],

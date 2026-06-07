@@ -291,8 +291,9 @@ ensure_runtime_files() {
   replace_or_append_env "$env_file" PURRIVACY_SECRETS_DIR ./secrets/prod
   replace_or_append_env "$env_file" PURRIVACY_HOST_BIND_ADDRESS 127.0.0.1
   replace_or_append_env "$env_file" PURRIVACY_HOST_PORT 3002
-  replace_or_append_env "$env_file" PURRIVACY_LOG_MAX_SIZE 10m
-  replace_or_append_env "$env_file" PURRIVACY_LOG_MAX_FILE 3
+  replace_or_append_env "$env_file" PURRIVACY_LOG_MAX_SIZE 2m
+  replace_or_append_env "$env_file" PURRIVACY_LOG_MAX_FILE 30
+  replace_or_append_env "$env_file" PURRIVACY_LOG_COMPRESS true
   replace_or_append_env "$env_file" PURRIVACY_MEMORY_LIMIT 256m
   replace_or_append_env "$env_file" PURRIVACY_MEMORY_SWAP_LIMIT 384m
   replace_or_append_env "$env_file" PURRIVACY_MEMORY_RESERVATION 64m

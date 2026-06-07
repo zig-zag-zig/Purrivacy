@@ -1,9 +1,10 @@
 import { auth, db } from '../../../infrastructure/firebase';
 import { UsernameIdentity } from '../identity/UsernameIdentity';
-import { UserDataSecurity } from '../../user/domain/UserDataSecurity';
+import { EncryptedUserDataValidator } from '../../user/domain/EncryptedUserDataValidator';
 import { UserRecoveryEncryptedData } from '../../../core/types';
 import { BadRequestError } from '../../../utils/errors';
 import { CryptoUtils } from '../../../utils/cryptoUtils';
+import { apiMessages } from '../../../api/http/apiMessages';
 
 const FAKE_SALT_BYTES = 16;
 const RECOVERY_VERIFIER_RE = /^[0-9a-f]{64}$/i;
@@ -45,29 +46,29 @@ export class RecoveryAccessService {
     ): Promise<{ userId: string; userEncrypted: UserRecoveryEncryptedData; tempToken: string }> {
         const username = UsernameIdentity.normalizeUsername(usernameInput);
         if (typeof recoveryVerifierInput !== 'string' || !RECOVERY_VERIFIER_RE.test(recoveryVerifierInput)) {
-            throw new BadRequestError('Invalid recovery credentials');
+            throw new BadRequestError(apiMessages.auth.invalidRecoveryCredentials);
         }
 
         const user = await this.getUserByUsername(username);
         if (!user) {
-            throw new BadRequestError('Invalid recovery credentials');
+            throw new BadRequestError(apiMessages.auth.invalidRecoveryCredentials);
         }
 
         const [doc] = await db.getAll(this.usersCollection.doc(user.uid), {
             fieldMask: ['dekSeed', 'recoveryVerifierHash'],
         });
         if (!doc.exists) {
-            throw new BadRequestError('Invalid recovery credentials');
+            throw new BadRequestError(apiMessages.auth.invalidRecoveryCredentials);
         }
 
         const expectedHash = doc.get('recoveryVerifierHash');
         const incomingHash = CryptoUtils.sha256(recoveryVerifierInput.toLowerCase());
         if (typeof expectedHash !== 'string' || !CryptoUtils.timingSafeEqual(expectedHash, incomingHash)) {
-            throw new BadRequestError('Invalid recovery credentials');
+            throw new BadRequestError(apiMessages.auth.invalidRecoveryCredentials);
         }
 
         const userEncrypted = {
-            dekSeed: UserDataSecurity.sanitizeEncryption(doc.get('dekSeed'), 'dekSeed'),
+            dekSeed: EncryptedUserDataValidator.sanitizeSaltedEncryptedPayload(doc.get('dekSeed'), 'dekSeed'),
         };
         const tempToken = await auth.createCustomToken(user.uid, { signInMethod: 'customToken' });
 

@@ -2,7 +2,7 @@
  * Custom error classes for consistent error handling
  */
 
-import { AuthErrorResponse } from "../core/types";
+import { AuthErrorDetails } from "../core/types";
 
 export class AppError<T extends object = Record<string, unknown>> extends Error {
     public readonly statusCode: number;
@@ -42,8 +42,8 @@ export class RateLimitError extends AppError {
     }
 }
 
-export class AuthError extends AppError<AuthErrorResponse> {
-    constructor(message: string, sessionError: AuthErrorResponse, statusCode: 403 | 401) {
+export class AuthError extends AppError<AuthErrorDetails> {
+    constructor(message: string, sessionError: AuthErrorDetails, statusCode: 403 | 401) {
         super(message, statusCode, sessionError);
     }
 }

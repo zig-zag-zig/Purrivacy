@@ -1,22 +1,19 @@
 import { SessionTrustRequest } from '../../../core/types';
 import { BadRequestError } from '../../../utils/errors';
+import { getBodyValue, requireBodyString } from '../../../api/http/requestParsing';
 
-export const parseMfaEnableRequest = (body: any): {
+export const parseMfaEnableRequest = (body: unknown): {
     mfaCode: string;
     mfaTrusted: boolean;
 } => {
-    if (typeof body?.mfaCode !== 'string' || !body.mfaCode.trim()) {
-        throw new BadRequestError('mfaCode is required');
-    }
-
-    const mfaCode = body.mfaCode.trim();
+    const mfaCode = requireBodyString(body, 'mfaCode', { trim: true });
     if (!/^\d{6}$/.test(mfaCode)) {
         throw new BadRequestError('mfaCode must be a 6-digit TOTP code');
     }
 
     return {
         mfaCode,
-        mfaTrusted: body.mfaTrusted === true,
+        mfaTrusted: getBodyValue(body, 'mfaTrusted') === true,
     };
 };
 

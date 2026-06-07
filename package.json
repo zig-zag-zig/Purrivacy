@@ -1,6 +1,6 @@
 {
   "name": "pgp-backend",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "main": "lib/server.js",
   "scripts": {
     "start": "node --enable-source-maps lib/server.js",
@@ -8,6 +8,7 @@
     "build": "npm run test:all && npm run build:unchecked",
     "build:unchecked": "rm -rf lib && tsc",
     "build:watch": "tsc --watch",
+    "typecheck": "tsc --noEmit",
     "test": "jest",
     "test:docker:local": "bash scripts/test-local-docker.sh",
     "test:emulator": "jest -c jest.emulator.config.cjs --runInBand",
@@ -24,7 +25,7 @@
     "otpauth": "^9.4.1"
   },
   "devDependencies": {
-    "@types/express": "^5.0.0",
+    "@types/express": "^4.17.25",
     "@types/jest": "^29.5.14",
     "@types/node": "^22.18.13",
     "firebase-tools": "^13.35.1",

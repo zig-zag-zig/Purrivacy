@@ -16,8 +16,8 @@ export const requestLogger = (req: Request, res: Response, next: NextFunction): 
             path: req.path,
             statusCode: res.statusCode,
             durationMs,
-            userId: (req as any).userId,
-            hasDeviceId: Boolean((req as any).deviceId),
+            userId: req.userId,
+            hasDeviceId: Boolean(req.deviceId),
         };
 
         if (res.statusCode >= 500) {

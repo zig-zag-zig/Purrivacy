@@ -43,7 +43,7 @@ const sanitizeEvent: NonNullable<Parameters<typeof Sentry.init>[0]>['beforeSend'
     return event;
 };
 
-export const initErrorMonitoring = (): void => {
+const initErrorMonitoring = (): void => {
     if (initialized || !env.sentryEnabled || !env.sentryDsn) {
         return;
     }

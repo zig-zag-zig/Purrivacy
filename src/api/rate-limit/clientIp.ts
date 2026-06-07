@@ -17,7 +17,7 @@ const remoteAddressOrUndefined = (value: unknown): string | undefined => {
 
 export const getClientIp = (req: Request): string => {
     return remoteAddressOrUndefined(req.socket.remoteAddress)
-        ?? remoteAddressOrUndefined((req as any).connection?.remoteAddress)
+        ?? remoteAddressOrUndefined(req.connection?.remoteAddress)
         ?? firstForwardedIp(req)
         ?? 'unknown';
 };

@@ -11,13 +11,13 @@ export const rateLimitKeys = {
 
     byUser: (includeDevice = false) => (req: Request): string => {
         const ip = getClientIp(req);
-        const userId = (req as any).userId || 'anonymous';
+        const userId = req.userId || 'anonymous';
 
         if (!includeDevice) {
             return `${ip}:${userId}:${requestParts(req)}`;
         }
 
-        const deviceId = (req as any).deviceId || req.headers['x-device-id'] as string || 'unknown';
+        const deviceId = req.deviceId || req.headers['x-device-id'] as string || 'unknown';
         return `${ip}:${userId}:${deviceId}:${requestParts(req)}`;
     },
 
@@ -29,7 +29,7 @@ export const rateLimitKeys = {
     },
 
     byDevice: () => (req: Request): string => {
-        const deviceId = (req as any).deviceId || req.headers['x-device-id'] as string || 'unknown';
+        const deviceId = req.deviceId || req.headers['x-device-id'] as string || 'unknown';
         return `${getClientIp(req)}:${deviceId}:${requestParts(req)}`;
     },
 

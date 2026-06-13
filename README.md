@@ -312,13 +312,15 @@ Purrivacy Firebase emulator tests use `127.0.0.1:9099`, `127.0.0.1:8080`, and `1
 | User key repository CRUD with fake RTDB (existing) | `userKeyRepository.test.ts` |
 | Encrypted user data size limits (existing) | `encryptedUserDataValidator.test.ts` |
 | Rate-limit key construction and client IP resolution (existing) | `rateLimitKeys.test.ts` |
+| Async handler wrapper — error forwarding to next() | `asyncHandler.test.ts` |
+| MFA error factory — sensitive/non-sensitive flag | `mfaErrors.test.ts` |
 
 **Service layer tests** (`tests/*.test.ts`) — uses [`fakeFirestore`](tests/helpers/fakeFirestore.ts) and [`fakeRealtimeDatabase`](tests/helpers/fakeRealtimeDatabase.ts) mocks:
 
 | Module | Tests |
 |--------|-------|
 | Refresh token rotation — expired, revoked, reuse detection, MFA required, success | `rotateRefreshToken.test.ts` |
-| Auth middleware — firebase/session methods, missing bearer token | `authMiddleware.test.ts` |
+| Auth middleware — firebase/session methods, missing bearer, token validation, user-not-found cleanup | `authMiddleware.test.ts` |
 | MFA recovery codes — regeneration, consumption, auto-regeneration at threshold | `mfaRecoveryCodes.test.ts` |
 | Session deletion — single and bulk user session cleanup | `sessionDeletion.test.ts` |
 | User key records (integration, emulator) | `userKeyRecords.integration.test.ts` |

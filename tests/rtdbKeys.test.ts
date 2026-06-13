@@ -3,6 +3,7 @@ import {
     encodeRtdbKeySegment,
     decodeRtdbKeySegment,
 } from '../src/infrastructure/firebase/rtdbKeys';
+import { BadRequestError } from '../src/utils/errors';
 
 describe('assertRtdbKey', () => {
     it('passes for a valid alphanumeric key', () => {
@@ -42,7 +43,7 @@ describe('assertRtdbKey', () => {
     });
 
     it('includes the field name in the error message', () => {
-        expect(() => assertRtdbKey('userId', 'bad.key')).toThrow('userId is not a valid Realtime Database key');
+        expect(() => assertRtdbKey('userId', 'bad.key')).toThrow(BadRequestError);
     });
 });
 

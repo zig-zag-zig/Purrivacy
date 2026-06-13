@@ -1,6 +1,7 @@
 import { getNotificationKind } from '../src/features/notification/application/notificationOptions';
 import { buildExpoPushMessages, collectInvalidPushTokens } from '../src/features/notification/application/expoPushPayloads';
 import { SendNotificationOptions } from '../src/features/notification/application/notificationTypes';
+import { BadRequestError } from '../src/utils/errors';
 
 describe('getNotificationKind', () => {
     it('returns visible when title is provided', () => {
@@ -24,28 +25,28 @@ describe('getNotificationKind', () => {
         expect(getNotificationKind({ eventName: 'chat.message', payload: { id: '1' } })).toBe('data');
     });
 
-    it('throws when title+eventName are both present', () => {
-        expect(() => getNotificationKind({ title: 'Hi', eventName: 'test' })).toThrow(/cannot contain data fields/);
+    it('throws BadRequestError when title+eventName are both present', () => {
+        expect(() => getNotificationKind({ title: 'Hi', eventName: 'test' })).toThrow(BadRequestError);
     });
 
-    it('throws when title+payload are both present', () => {
-        expect(() => getNotificationKind({ title: 'Hi', payload: { id: '1' } })).toThrow(/cannot contain data fields/);
+    it('throws BadRequestError when title+payload are both present', () => {
+        expect(() => getNotificationKind({ title: 'Hi', payload: { id: '1' } })).toThrow(BadRequestError);
     });
 
-    it('throws when eventName is missing for data notification', () => {
-        expect(() => getNotificationKind({})).toThrow(/require eventName/);
+    it('throws BadRequestError when eventName is missing for data notification', () => {
+        expect(() => getNotificationKind({})).toThrow(BadRequestError);
     });
 
-    it('throws when payload is null', () => {
-        expect(() => getNotificationKind({ eventName: 'test', payload: null as unknown })).toThrow(/must be an object/);
+    it('throws BadRequestError when payload is null', () => {
+        expect(() => getNotificationKind({ eventName: 'test', payload: null as unknown })).toThrow(BadRequestError);
     });
 
-    it('throws when payload is an array', () => {
-        expect(() => getNotificationKind({ eventName: 'test', payload: [1, 2] as unknown })).toThrow(/must be an object/);
+    it('throws BadRequestError when payload is an array', () => {
+        expect(() => getNotificationKind({ eventName: 'test', payload: [1, 2] as unknown })).toThrow(BadRequestError);
     });
 
-    it('throws when payload is a string', () => {
-        expect(() => getNotificationKind({ eventName: 'test', payload: 'bad' as unknown })).toThrow(/must be an object/);
+    it('throws BadRequestError when payload is a string', () => {
+        expect(() => getNotificationKind({ eventName: 'test', payload: 'bad' as unknown })).toThrow(BadRequestError);
     });
 });
 

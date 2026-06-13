@@ -23,7 +23,7 @@ export const normalizePushTokens = (pushTokens: string[]): string[] => (
   })))
 );
 
-export const normalizeDeviceId = (deviceId: string): string => {
+export const requireDeviceId = (deviceId: string): string => {
   const normalized = deviceId.trim();
   if (!normalized) {
     throw new BadRequestError('deviceId is required');

@@ -39,6 +39,7 @@ const mockRes = (): Response & { locals: Record<string, unknown> } => {
 describe('authMiddleware', () => {
     beforeEach(() => {
         fakeFs.reset();
+        jest.restoreAllMocks();
     });
 
     it('firebase method extracts userId from verified token (mocked AuthSessionService)', async () => {
@@ -62,7 +63,7 @@ describe('authMiddleware', () => {
         expect(next).toHaveBeenCalledWith();
     });
 
-    it('session method throws 401 when no bearer token is provided', async () => {
+    it('session method passes 401 error to next() when no bearer token is provided', async () => {
         jest.mock('../src/features/session/application/AuthSessionService', () => ({
             AuthSessionService: { extractUserIdFromToken: jest.fn() },
         }));
@@ -77,9 +78,78 @@ describe('authMiddleware', () => {
         const middleware = authenticate('session');
         await middleware(req, res, next);
 
-        // Should call next with an error
         expect(next).toHaveBeenCalledWith(expect.objectContaining({
             message: expect.stringContaining('not provided'),
+            statusCode: 401,
+        }));
+    });
+
+    it('session method passes error to next() when token validation fails', async () => {
+        jest.mock('../src/features/session/application/AuthSessionService', () => ({
+            AuthSessionService: { extractUserIdFromToken: jest.fn() },
+        }));
+        jest.mock('../src/features/session/application/SessionService', () => ({
+            SessionService: {
+                validateSession: jest.fn().mockRejectedValue(
+                    new (require('../src/utils/errors').AuthError)('Invalid token', { sessionInvalid: true }, 401)
+                ),
+                deleteSession: jest.fn(),
+            },
+        }));
+        jest.mock('../src/features/user/application/UserService', () => ({
+            UserService: { getUserMfaState: jest.fn() },
+        }));
+
+        jest.resetModules();
+        const { authenticate } = require('../src/api/middleware/authMiddleware') as typeof import('../src/api/middleware/authMiddleware');
+
+        const req = mockReq({ headers: { authorization: 'Bearer bad-token' } });
+        const res = mockRes();
+        const next = jest.fn() as NextFunction;
+
+        const middleware = authenticate('session');
+        await middleware(req, res, next);
+
+        expect(next).toHaveBeenCalledWith(expect.objectContaining({
+            statusCode: 401,
+        }));
+    });
+
+    it('session method deletes session when user is not found (404)', async () => {
+        const mockDeleteSession = jest.fn().mockResolvedValue(undefined);
+
+        jest.mock('../src/features/session/application/AuthSessionService', () => ({
+            AuthSessionService: { extractUserIdFromToken: jest.fn() },
+        }));
+        jest.mock('../src/features/session/application/SessionService', () => ({
+            SessionService: {
+                validateSession: jest.fn().mockResolvedValue({ userId: 'user-1', refreshTokenFamilyId: 'fam-1' }),
+                deleteSession: mockDeleteSession,
+            },
+        }));
+        jest.mock('../src/features/user/application/UserService', () => ({
+            UserService: {
+                getUserMfaState: jest.fn().mockRejectedValue(
+                    new (require('../src/utils/errors').NotFoundError)('User not found')
+                ),
+            },
+        }));
+
+        jest.resetModules();
+        const { authenticate } = require('../src/api/middleware/authMiddleware') as typeof import('../src/api/middleware/authMiddleware');
+
+        const req = mockReq({ headers: { authorization: 'Bearer valid-token' } });
+        const res = mockRes();
+        const next = jest.fn() as NextFunction;
+
+        const middleware = authenticate('session');
+        await middleware(req, res, next);
+
+        // Should delete session on user-not-found
+        expect(mockDeleteSession).toHaveBeenCalledWith('valid-token');
+        // Should propagate the 404 error
+        expect(next).toHaveBeenCalledWith(expect.objectContaining({
+            statusCode: 404,
         }));
     });
 });

@@ -8,7 +8,7 @@ import { rateLimiter } from '../../../api/middleware/rateLimiter';
 import {
     requireAuthenticatedUserId,
     requireSessionFamilyId,
-} from '../../../api/http/requestContext';
+} from '../../../api/http/requestContextHelpers';
 import {
     parseMfaEnableRequest,
     parseSessionTrustRequest,

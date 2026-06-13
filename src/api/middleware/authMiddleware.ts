@@ -6,7 +6,7 @@ import { AuthSessionService } from '../../features/session/application/AuthSessi
 import { UserService } from '../../features/user/application/UserService';
 import { createLogger } from '../../utils/logger';
 import { getBearerToken } from '../http/requestParsing';
-import { requireAuthenticatedUserId } from '../http/requestContext';
+import { requireAuthenticatedUserId } from '../http/requestContextHelpers';
 
 const logger = createLogger('api.auth');
 

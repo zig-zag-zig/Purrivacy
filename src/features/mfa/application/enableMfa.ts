@@ -8,13 +8,11 @@ import {
     MfaSetupExpiredError,
     NotFoundError,
 } from '../../../utils/errors';
-import { createLogger } from '../../../utils/logger';
 import { NotificationService } from '../../notification/application/NotificationService';
 import { UserService } from '../../user/application/UserService';
 import { getMfaSecurityRef, getMfaSetupRef } from './mfaRefs';
 import { verifyMfaTotp } from './mfaTotp';
 
-const logger = createLogger('features.mfa.enable');
 
 export const verifyAndEnableMfa = async (
     userId: string,
@@ -58,12 +56,13 @@ export const verifyAndEnableMfa = async (
     } satisfies UserMfaSecurity);
     await batch.commit();
 
-    await NotificationService.sendDataOnlyNotification(
+    await NotificationService.sendDataOnlyNotificationSafe(
         userId,
         'mfaState',
+        'mfa enable',
         { mfaEnabled: true, mfaTrusted: false },
         { excludeDeviceId: currentDeviceId },
-    ).catch((error) => logger.warn('mfa enable notification failed', { userId, error }));
+    );
 
     await setupDoc.ref.delete();
     return true;

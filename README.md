@@ -263,7 +263,7 @@ Authenticated endpoints expect a Bearer token in the `Authorization` header. Dev
 
 ## Testing
 
-Run the fast backend test suite:
+Run the unit test suite:
 
 ```bash
 npm test
@@ -281,9 +281,49 @@ Run the full backend verification, including Firebase emulator integration tests
 npm run verify
 ```
 
+Run integration tests only (requires Firebase emulator):
+
+```bash
+npm run test:integration
+```
+
 Purrivacy Firebase emulator tests use `127.0.0.1:9099`, `127.0.0.1:8080`, and `127.0.0.1:9000`.
 
-The current tests cover HTTP response helpers, session request parsing, refresh-token/session security helpers, rate-limit key construction, encrypted user data validation, user key records, and related edge cases without writing to a live Firebase project.
+### Test inventory
+
+**Unit tests** (`tests/*.test.ts`) — 17 files covering:
+
+| Area | Tests |
+|------|-------|
+| [`CryptoUtils`](src/utils/cryptoUtils.ts) — encrypt/decrypt, sha256, timingSafeEqual, recovery codes, randomHex | `cryptoUtils.test.ts` |
+| MFA code classification (`getMfaCodeKind`) | `mfaCodeFormats.test.ts` |
+| RTDB key validation and encode/decode round-trip | `rtdbKeys.test.ts` |
+| Firestore date parsing and validation | `firestoreDate.test.ts` |
+| Username normalization and Firebase email mapping | `usernameIdentity.test.ts` |
+| Notification kind classification and Expo push payloads | `notificationPayloads.test.ts` |
+| Logger PII redaction and safeStringify edge cases | `loggerRedaction.test.ts` |
+| HTTP error middleware — SyntaxError, entity.too.large, AppError subclasses, headersSent | `httpMiddleware.test.ts` |
+| Rate limiter — window reset, count increment, headers, skipSuccessfulRequests | `createRateLimiter.test.ts` |
+| Request context middleware — UUID generation, X-Request-ID passthrough, truncation | `requestMiddleware.test.ts` |
+| Push token assignment type guards | `pushTokenGuards.test.ts` |
+| Environment variable parsing functions | `envParsing.test.ts` |
+| Request parsing and validation (existing) | `sessionRequests.test.ts` |
+| Session token generation and MFA policy (existing) | `sessionSecurity.test.ts` |
+| User key repository CRUD with fake RTDB (existing) | `userKeyRepository.test.ts` |
+| Encrypted user data size limits (existing) | `encryptedUserDataValidator.test.ts` |
+| Rate-limit key construction and client IP resolution (existing) | `rateLimitKeys.test.ts` |
+| Async handler wrapper — error forwarding to next() | `asyncHandler.test.ts` |
+| MFA error factory — sensitive/non-sensitive flag | `mfaErrors.test.ts` |
+
+**Service layer tests** (`tests/*.test.ts`) — uses [`fakeFirestore`](tests/helpers/fakeFirestore.ts) and [`fakeRealtimeDatabase`](tests/helpers/fakeRealtimeDatabase.ts) mocks:
+
+| Module | Tests |
+|--------|-------|
+| Refresh token rotation — expired, revoked, reuse detection, MFA required, success | `rotateRefreshToken.test.ts` |
+| Auth middleware — firebase/session methods, missing bearer, token validation, user-not-found cleanup | `authMiddleware.test.ts` |
+| MFA recovery codes — regeneration, consumption, auto-regeneration at threshold | `mfaRecoveryCodes.test.ts` |
+| Session deletion — single and bulk user session cleanup | `sessionDeletion.test.ts` |
+| User key records (integration, emulator) | `userKeyRecords.integration.test.ts` |
 
 ## Production Notes
 

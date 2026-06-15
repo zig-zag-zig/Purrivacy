@@ -1,8 +1,10 @@
+import { BadRequestError } from '../../utils/errors';
+
 const INVALID_RTDB_KEY_CHARS = /[.$#[\]/]/;
 
 export const assertRtdbKey = (name: string, value: string): void => {
   if (!value.trim() || INVALID_RTDB_KEY_CHARS.test(value)) {
-    throw new Error(`Invalid input: ${name} is not a valid Realtime Database key.`);
+    throw new BadRequestError(`Invalid input: ${name} is not a valid Realtime Database key.`);
   }
 };
 

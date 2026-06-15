@@ -19,3 +19,11 @@ export const startMaintenanceJobs = (): void => {
     maintenanceInterval = setInterval(runMaintenance, 60 * 60 * 1000);
     logger.info('maintenance jobs started');
 };
+
+export const stopMaintenanceJobs = (): void => {
+    if (maintenanceInterval) {
+        clearInterval(maintenanceInterval);
+        maintenanceInterval = null;
+        logger.info('maintenance jobs stopped');
+    }
+};

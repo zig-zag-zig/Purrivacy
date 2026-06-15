@@ -10,8 +10,7 @@ import { deleteUserPushTokensFromDb } from '../../notification/infrastructure/pu
 const logger = createLogger('features.user.writes');
 
 const notifyUserDataChanged = (userId: string): void => {
-    void NotificationService.sendDataOnlyNotification(userId, 'user')
-        .catch((error) => logger.warn('user update notification failed', { userId, error }));
+    void NotificationService.sendDataOnlyNotificationSafe(userId, 'user', 'user update');
 };
 
 export const queueUserMfaEnabledUpdate = (

@@ -4,7 +4,7 @@ import { authenticate, verifySensitiveMfa } from '../../../api/middleware/authMi
 import { asyncHandler } from '../../../utils/asyncHandler';
 import { ResponseUtils } from '../../../utils/responseUtils';
 import { rateLimiter } from '../../../api/middleware/rateLimiter';
-import { requireAuthenticatedUserId } from '../../../api/http/requestContext';
+import { requireAuthenticatedUserId } from '../../../api/http/requestContextHelpers';
 import {
     parseChangePasswordRequest,
     parseCreateUserRequest,

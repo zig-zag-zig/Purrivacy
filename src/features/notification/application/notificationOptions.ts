@@ -1,4 +1,5 @@
 import { SendNotificationOptions, NotificationKind } from './notificationTypes';
+import { BadRequestError } from '../../../utils/errors';
 
 export const getNotificationKind = (options: SendNotificationOptions): NotificationKind => {
     const hasTitleOrBody = !!options.title?.trim() || !!options.body?.trim();
@@ -7,20 +8,20 @@ export const getNotificationKind = (options: SendNotificationOptions): Notificat
 
     if (hasTitleOrBody) {
         if (hasEventName || hasPayload) {
-            throw new Error('Visible notifications cannot contain data fields. Remove eventName/payload.');
+            throw new BadRequestError('Visible notifications cannot contain data fields. Remove eventName/payload.');
         }
         return 'visible';
     }
 
     if (!hasEventName) {
-        throw new Error('Data notifications require eventName (non-empty string).');
+        throw new BadRequestError('Data notifications require eventName (non-empty string).');
     }
 
     if (
         options.payload !== undefined &&
         (options.payload === null || typeof options.payload !== 'object' || Array.isArray(options.payload))
     ) {
-        throw new Error('payload must be an object when provided');
+        throw new BadRequestError('payload must be an object when provided');
     }
 
     return 'data';

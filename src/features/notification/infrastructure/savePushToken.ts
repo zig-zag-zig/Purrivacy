@@ -7,7 +7,7 @@ import {
   getPushTokenAssignment,
 } from './pushTokens/pushTokenAssignments';
 import {
-  normalizeDeviceId,
+  requireDeviceId,
   normalizePushToken,
 } from './pushTokens/pushTokenNormalization';
 import {
@@ -27,7 +27,7 @@ export const savePushTokenToDb = async (
 ): Promise<void> => {
   assertRtdbKey('userId', userId);
 
-  const normalizedDeviceId = normalizeDeviceId(deviceId);
+  const normalizedDeviceId = requireDeviceId(deviceId);
   const normalizedPushToken = normalizePushToken(pushToken);
   if (!normalizedPushToken) {
     return;

@@ -1,5 +1,5 @@
-import { rtdb } from '../../../../infrastructure/firebase/index.js';
-import { assertRtdbKey, encodeRtdbKeySegment } from '../../../../infrastructure/firebase/rtdbKeys.js';
+import { rtdb } from '../../../../infrastructure/firebase/index';
+import { assertRtdbKey, encodeRtdbKeySegment } from '../../../../infrastructure/firebase/rtdbKeys';
 import { BadRequestError } from '../../../../utils/errors';
 
 export const USER_KEY_ITEMS_CHILD = 'items';

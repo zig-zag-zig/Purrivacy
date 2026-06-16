@@ -1,11 +1,11 @@
 /** @type {import('jest').Config} */
 module.exports = {
   clearMocks: true,
-  roots: ['<rootDir>/tests'],
-  setupFiles: ['<rootDir>/tests/setupEnv.ts'],
+  roots: ['<rootDir>/tests/unit'],
+  setupFiles: ['<rootDir>/tests/setup.ts'],
   testEnvironment: 'node',
   testMatch: ['**/*.test.ts'],
-  testPathIgnorePatterns: ['/node_modules/', '/tests/emulator/'],
+  testPathIgnorePatterns: ['/node_modules/', '/tests/integration/'],
   moduleNameMapper: {
     '^(\\.{1,2}/.*)\\.js$': '$1',
   },

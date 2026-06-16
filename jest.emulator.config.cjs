@@ -1,8 +1,8 @@
 /** @type {import('jest').Config} */
 module.exports = {
   clearMocks: true,
-  roots: ['<rootDir>/tests/emulator'],
-  setupFiles: ['<rootDir>/tests/setupEmulatorEnv.ts'],
+  roots: ['<rootDir>/tests/integration'],
+  setupFiles: ['<rootDir>/tests/setup.emulator.ts'],
   testEnvironment: 'node',
   testMatch: ['**/*.test.ts'],
   moduleNameMapper: {

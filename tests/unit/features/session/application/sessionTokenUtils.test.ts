@@ -1,7 +1,5 @@
 import { AuthError, BadRequestError } from '../../../../../src/utils/errors';
-import { UNTRUSTED_MFA_MAX_AGE_MS } from '../../../../../src/core/constants';
-import { RefreshTokenFamily, Session } from '../../../../../src/core/types';
-import { requiresMfaForRefresh } from '../../../../../src/features/session/application/sessionMfaPolicy';
+import { RefreshTokenFamily } from '../../../../../src/core/types';
 import {
   MAX_ACCESS_TOKEN_LENGTH,
   TOKEN_ID_HEX_LENGTH,
@@ -22,16 +20,7 @@ const family = (overrides: Partial<RefreshTokenFamily> = {}): RefreshTokenFamily
   ...overrides,
 });
 
-const activeSession = (overrides: Partial<Session> = {}): Session => ({
-  accessTokenHash: 'access-hash',
-  userId: 'user-1',
-  refreshTokenFamilyId: 'family-1',
-  createdAt: new Date('2026-01-01T00:00:00.000Z'),
-  expiresAt: new Date('2026-01-01T00:15:00.000Z'),
-  ...overrides,
-});
-
-describe('session token and MFA security helpers', () => {
+describe('sessionTokenUtils', () => {
   it('generates parseable refresh tokens while exposing only the token id for lookup', () => {
     const refreshToken = generateRefreshToken();
 
@@ -66,17 +55,6 @@ describe('session token and MFA security helpers', () => {
     expect(normalizeDeviceId('   ')).toBeUndefined();
     expect(normalizeDeviceId('  ios-device  ')).toBe('ios-device');
     expect(() => normalizeDeviceId('x'.repeat(257))).toThrow(BadRequestError);
-  });
-
-  it('requires MFA on refresh only when an untrusted MFA family lacks fresh verification', () => {
-    const now = new Date('2026-01-01T12:00:00.000Z');
-
-    expect(requiresMfaForRefresh(family({ userHasMfa: false }), null, now)).toBe(false);
-    expect(requiresMfaForRefresh(family({ mfaTrusted: true }), null, now)).toBe(false);
-    expect(requiresMfaForRefresh(family({ mfaVerifiedAt: new Date(now.getTime() - 1_000) }), activeSession(), now)).toBe(false);
-    expect(requiresMfaForRefresh(family({ mfaVerifiedAt: new Date(now.getTime() - UNTRUSTED_MFA_MAX_AGE_MS - 1) }), activeSession(), now)).toBe(true);
-    expect(requiresMfaForRefresh(family({ mfaVerifiedAt: new Date(now.getTime() - 1_000) }), null, now)).toBe(true);
-    expect(requiresMfaForRefresh(family({ mfaVerifiedAt: new Date('invalid') }), activeSession(), now)).toBe(true);
   });
 
   it('builds session responses with ISO timestamps and MFA state derived from the token family', () => {

@@ -100,6 +100,11 @@ export const createFakeFirestore = () => {
             return clone(getDoc(this._ref._collection, this._ref.id).data);
         }
 
+        get(field: string): any {
+            const doc = getDoc(this._ref._collection, this._ref.id);
+            return doc.data ? clone(doc.data[field]) : undefined;
+        }
+
         get ref(): FakeDocumentReference {
             return this._ref;
         }
@@ -227,8 +232,15 @@ export const createFakeFirestore = () => {
         batch(): FakeWriteBatch {
             return new FakeWriteBatch();
         },
-        async getAll(...refs: FakeDocumentReference[]): Promise<FakeDocumentSnapshot[]> {
-            return refs.map(ref => new FakeDocumentSnapshot(ref));
+        async getAll(
+            ...args: [FakeDocumentReference, ...FakeDocumentReference[]] | [FakeDocumentReference[], { fieldMask?: string[] }]
+        ): Promise<FakeDocumentSnapshot[]> {
+            if (Array.isArray(args[0])) {
+                const refs = args[0] as FakeDocumentReference[];
+                return Promise.resolve(refs.map(ref => new FakeDocumentSnapshot(ref)));
+            }
+            const refs = args as FakeDocumentReference[];
+            return Promise.resolve(refs.map(ref => new FakeDocumentSnapshot(ref)));
         },
         async runTransaction<T>(fn: (tx: FakeTransaction) => Promise<T>): Promise<T> {
             const tx = new FakeTransaction();

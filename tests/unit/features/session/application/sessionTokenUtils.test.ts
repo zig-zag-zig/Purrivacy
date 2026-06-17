@@ -1,5 +1,4 @@
 import { AuthError, BadRequestError } from '../../../../../src/utils/errors';
-import { RefreshTokenFamily } from '../../../../../src/core/types';
 import {
   MAX_ACCESS_TOKEN_LENGTH,
   TOKEN_ID_HEX_LENGTH,
@@ -8,17 +7,7 @@ import {
   parseRefreshTokenId,
 } from '../../../../../src/features/session/application/sessionTokenUtils';
 import { buildSessionResponse } from '../../../../../src/features/session/application/sessionResponse';
-
-const family = (overrides: Partial<RefreshTokenFamily> = {}): RefreshTokenFamily => ({
-  familyId: 'family-1',
-  userId: 'user-1',
-  createdAt: new Date('2026-01-01T00:00:00.000Z'),
-  lastUsedAt: new Date('2026-01-01T00:00:00.000Z'),
-  expiresAt: new Date('2026-04-01T00:00:00.000Z'),
-  userHasMfa: true,
-  mfaTrusted: false,
-  ...overrides,
-});
+import { createRefreshTokenFamily } from '../../../../helpers/testFixtures';
 
 describe('sessionTokenUtils', () => {
   it('generates parseable refresh tokens while exposing only the token id for lookup', () => {
@@ -64,7 +53,7 @@ describe('sessionTokenUtils', () => {
       new Date('2026-01-01T00:15:00.000Z'),
       'refresh',
       new Date('2026-04-01T00:00:00.000Z'),
-      family({ userHasMfa: true, mfaTrusted: false }),
+      createRefreshTokenFamily({ userHasMfa: true, mfaTrusted: false }),
     )).toEqual({
       accessToken: 'access',
       refreshToken: 'refresh',

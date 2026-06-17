@@ -12,4 +12,13 @@ module.exports = {
   transform: {
     '^.+\\.ts$': ['ts-jest', { tsconfig: '<rootDir>/tsconfig.jest.json' }],
   },
+  coverageDirectory: '<rootDir>/coverage',
+  coverageThreshold: {
+    global: {
+      branches: 50,
+      functions: 70,
+      lines: 80,
+      statements: 80,
+    },
+  },
 };

@@ -1,26 +1,21 @@
-import { NextFunction, Request, Response } from 'express';
+import { NextFunction } from 'express';
+import { createMockRequest, createMockResponse } from '../../../helpers/testFixtures';
+
+type RequestMetadataModule = typeof import('../../../../src/api/middleware/requestMetadata');
+
+const loadMiddleware = (): RequestMetadataModule => {
+    jest.resetModules();
+    return require('../../../../src/api/middleware/requestMetadata') as RequestMetadataModule;
+};
 
 describe('requestMetadata', () => {
     it('sets device context, security headers, and allowed CORS origins', () => {
         process.env.ALLOWED_ORIGINS = 'https://app.example';
-        jest.resetModules();
-        const { requestMetadata: middleware } = require('../../../../src/api/middleware/requestMetadata') as typeof import('../../../../src/api/middleware/requestMetadata');
-        const req = {
+        const { requestMetadata: middleware } = loadMiddleware();
+        const req = createMockRequest({
             headers: { origin: 'https://app.example', 'x-device-id': ['device-1', 'device-2'] },
-            method: 'GET',
-        } as Request;
-        const res = {
-            headers: {}, headersSent: false, locals: {},
-            setHeader(name: string, value: string | number | readonly string[]) {
-                (this as Record<string, unknown>).headers[name] = value;
-                return this;
-            },
-            status(statusCode: number) {
-                (this as Record<string, unknown>).statusCodeValue = statusCode;
-                return this;
-            },
-            end() { (this as Record<string, unknown>).ended = true; return this; },
-        } as unknown as Response & { headers: Record<string, string | number | readonly string[]>; statusCodeValue?: number; ended?: boolean };
+        });
+        const res = createMockResponse();
         const next: NextFunction = jest.fn();
 
         middleware(req, res, next);
@@ -33,22 +28,11 @@ describe('requestMetadata', () => {
     });
 
     it('responds to CORS preflight without continuing the middleware chain', () => {
-        const req = { headers: {}, method: 'OPTIONS' } as Request;
-        const res = {
-            headers: {}, headersSent: false, locals: {},
-            setHeader(name: string, value: string | number | readonly string[]) {
-                (this as Record<string, unknown>).headers[name] = value;
-                return this;
-            },
-            status(statusCode: number) {
-                (this as Record<string, unknown>).statusCodeValue = statusCode;
-                return this;
-            },
-            end() { (this as Record<string, unknown>).ended = true; return this; },
-        } as unknown as Response & { headers: Record<string, string | number | readonly string[]>; statusCodeValue?: number; ended?: boolean };
+        const { requestMetadata } = loadMiddleware();
+        const req = createMockRequest({ method: 'OPTIONS' });
+        const res = createMockResponse();
         const next: NextFunction = jest.fn();
 
-        const { requestMetadata } = require('../../../../src/api/middleware/requestMetadata') as typeof import('../../../../src/api/middleware/requestMetadata');
         requestMetadata(req, res, next);
 
         expect(res.statusCodeValue).toBe(204);

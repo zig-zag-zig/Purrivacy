@@ -4,7 +4,7 @@ const fakeFs = createFakeFirestore();
 
 jest.mock('../../../../../src/infrastructure/firebase/index.js', () => ({
     db: fakeFs.db,
-}), { virtual: true });
+}));
 
 const loadRepo = (): typeof import('../../../../../src/features/user/infrastructure/UserRepository') => (
     require('../../../../../src/features/user/infrastructure/UserRepository')

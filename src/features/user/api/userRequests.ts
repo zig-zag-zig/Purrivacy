@@ -40,3 +40,12 @@ export const parseSavePushTokenRequest = (
 export const parseDeletePushTokenRequest = (body: unknown): string => {
     return requireBodyString(body, 'pushToken');
 };
+
+export const parseSetPassphraseStorageRequest = (body: unknown): { enabled: boolean } => {
+    const value = (body as Record<string, unknown>)?.enabled;
+    if (typeof value !== 'boolean') {
+        throw new BadRequestError('enabled must be a boolean');
+    }
+    return { enabled: value };
+};
+

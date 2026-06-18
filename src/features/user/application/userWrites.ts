@@ -72,3 +72,23 @@ export const deleteUser = async (userId: string): Promise<void> => {
         deleteUserPushTokensFromDb(userId),
     ]);
 };
+
+const PASSPHRASE_STORAGE_FIELD = 'passphraseStorageEnabled';
+
+export const setPassphraseStorage = async (
+    userId: string,
+    enabled: boolean,
+    deviceId?: string,
+): Promise<void> => {
+    const userRef = getUserRef(userId);
+    await userRef.update({ [PASSPHRASE_STORAGE_FIELD]: enabled });
+
+    // Notify all user devices to re-fetch keys with updated passphrase state
+    await NotificationService.sendDataOnlyNotificationSafe(
+        userId,
+        'user',
+        'passphrase storage toggle',
+        { enabled },
+        { excludeDeviceId: deviceId },
+    );
+};

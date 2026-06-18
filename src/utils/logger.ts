@@ -13,30 +13,48 @@ const activeLevel = (LEVEL_WEIGHT[env.logLevel as LogLevel] ? env.logLevel : 'in
 const SECRET_KEY_RE = /(?:authorization|cookie|token|secret|password|credential|private|mfaCode|refreshToken|accessToken|email|username|uid|userId|userIds|firebaseUid|deviceId|ip|clientIp|sessionId|sessionFamilyId|familyId|recovery|keys|dek|seed|salt|verifier|encrypted|cipher|rateLimitKey)/i;
 const serviceName = process.env.LOG_SERVICE_NAME?.trim() || process.env.npm_package_name?.trim() || 'purrivacy-api';
 
-const redact = (value: unknown): unknown => {
-    if (value instanceof Error) {
-        return {
-            name: value.name,
-            message: value.message,
-            stack: env.nodeEnv === 'production' ? undefined : value.stack,
-        };
-    }
+const createRedactor = () => {
+    const seen = new WeakSet<object>();
 
-    if (Array.isArray(value)) {
-        return value.map(redact);
-    }
+    const redact = (value: unknown): unknown => {
+        if (value instanceof Error) {
+            return {
+                name: value.name,
+                message: value.message,
+                stack: env.nodeEnv === 'production' ? undefined : value.stack,
+            };
+        }
 
-    if (!value || typeof value !== 'object') {
-        return value;
-    }
+        if (Array.isArray(value)) {
+            return value.map(redact);
+        }
 
-    return Object.fromEntries(
-        Object.entries(value as Record<string, unknown>).map(([key, entry]) => [
-            key,
-            SECRET_KEY_RE.test(key) ? '[redacted]' : redact(entry),
-        ]),
-    );
+        if (!value || typeof value !== 'object') {
+            return value;
+        }
+
+        if (seen.has(value as object)) {
+            return '[circular]';
+        }
+
+        seen.add(value as object);
+
+        try {
+            return Object.fromEntries(
+                Object.entries(value as Record<string, unknown>).map(([key, entry]) => [
+                    key,
+                    SECRET_KEY_RE.test(key) ? '[redacted]' : redact(entry),
+                ]),
+            );
+        } finally {
+            seen.delete(value as object);
+        }
+    };
+
+    return redact;
 };
+
+const redact = createRedactor();
 
 const shouldLog = (level: LogLevel): boolean => LEVEL_WEIGHT[level] >= LEVEL_WEIGHT[activeLevel];
 

@@ -20,3 +20,4 @@ ui-debug.log
 secrets/
 service-account*.json
 firebase-service-account*.json
+coverage/

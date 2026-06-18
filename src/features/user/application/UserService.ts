@@ -9,6 +9,7 @@ import {
     createUser,
     deleteUser,
     queueUserMfaEnabledUpdate,
+    setPassphraseStorage,
 } from './userWrites';
 import { deleteUserPushToken, saveUserPushToken } from './userPushTokens';
 import { getEncryptedUser, getUser, getUserMfaState } from './userReads';
@@ -110,4 +111,13 @@ export class UserService {
     ): Promise<void> {
         await deleteUserEncryptedKeyRecord(userId, recordId);
     }
+
+    static async setPassphraseStorage(
+        userId: string,
+        enabled: boolean,
+        deviceId?: string,
+    ): Promise<void> {
+        await setPassphraseStorage(userId, enabled, deviceId);
+    }
+
 }

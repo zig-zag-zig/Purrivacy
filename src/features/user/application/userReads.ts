@@ -16,7 +16,15 @@ export const getUserMfaState = async (userId: string): Promise<{ mfaEnabled: boo
 };
 
 export const getEncryptedUser = async (userId: string): Promise<UserEncryptedData> => {
-    const doc = await getUserWithFieldMask(userId, ['dekPassword', 'dekSeed']);
+    const doc = await getUserWithFieldMask(userId, ['dekPassword', 'dekSeed', 'passphraseStorageEnabled']);
     const keys = await readUserEncryptedKeys(userId);
-    return EncryptedUserDataValidator.sanitizeUserEncryptedData({ ...doc.data(), keys });
+    const data = { ...doc.data(), keys };
+    const sanitized = EncryptedUserDataValidator.sanitizeUserEncryptedData(data);
+    // Thread through the passphrase storage setting so the client can auto-sync on login
+    const passphraseStorageEnabled = doc.get('passphraseStorageEnabled');
+    if (typeof passphraseStorageEnabled === 'boolean') {
+        (sanitized as unknown as Record<string, unknown>).passphraseStorageEnabled = passphraseStorageEnabled;
+    }
+    return sanitized;
 };
+

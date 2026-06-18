@@ -3,9 +3,15 @@
   "compilerOptions": {
     "noEmit": true,
     "isolatedModules": true,
-    "noUnusedLocals": false,
+    "noUnusedLocals": true,
     "rootDir": ".",
-    "types": ["jest", "node"]
+    "types": [
+      "jest",
+      "node"
+    ]
   },
-  "include": ["src/**/*.ts", "tests/**/*.ts"]
+  "include": [
+    "src/**/*.ts",
+    "tests/**/*.ts"
+  ]
 }

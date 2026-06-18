@@ -7,7 +7,7 @@ import {
   removePushTokenAssignmentIfMatches,
   removeUserPushDeviceIndexIfMatches,
 } from './pushTokens/pushTokenAssignments';
-import { normalizeDeviceId, normalizePushTokens } from './pushTokens/pushTokenNormalization';
+import { requireDeviceId, normalizePushTokens } from './pushTokens/pushTokenNormalization';
 import { getUserPushDeviceRef, getUserPushDevicesRef } from './pushTokens/pushTokenRefs';
 
 const deleteDevicePushTokenFromDb = async (
@@ -16,7 +16,7 @@ const deleteDevicePushTokenFromDb = async (
 ): Promise<void> => {
   assertRtdbKey('userId', userId);
 
-  const normalizedDeviceId = normalizeDeviceId(deviceId);
+  const normalizedDeviceId = requireDeviceId(deviceId);
   const encodedDeviceId = encodeRtdbKeySegment(normalizedDeviceId);
   const deviceAssignment = await getDevicePushTokenAssignment(encodedDeviceId);
   const userDeviceSnapshot = await getUserPushDeviceRef(userId, encodedDeviceId).get();

@@ -94,6 +94,23 @@ docker compose --env-file .env.local up -d --build --wait
 curl http://127.0.0.1:3002/v1/health
 ```
 
+For local development with hot reload, use the dev override instead. This mounts `src/` and runs `nodemon` with `ts-node` so code changes restart the server automatically:
+
+```bash
+docker compose --env-file .env.local -f docker-compose.yml -f docker-compose.dev.yml up -d --build --wait
+curl http://127.0.0.1:3002/v1/health
+```
+
+If file changes are not detected inside the container (common on macOS and Windows Docker Desktop), add `CHOKIDAR_USEPOLLING=true` to the `environment` section in `docker-compose.dev.yml`.
+
+If you are running the Purrivacy mobile app on a connected Android device or emulator, forward the backend port so the app can reach the host Docker service:
+
+```bash
+adb reverse tcp:3002 tcp:3002
+```
+
+Then the app can call http://127.0.0.1:3002 through the reverse proxy.
+
 To run a local Docker smoke test that always stops the stack afterward, even on failure or Ctrl+C:
 
 ```bash
@@ -108,7 +125,13 @@ To stop local Docker:
 docker compose --env-file .env.local down
 ```
 
-### Docker Logs
+To stop a hot-reload dev session:
+
+```bash
+docker compose --env-file .env.local -f docker-compose.yml -f docker-compose.dev.yml down
+```
+
+## Docker Logs
 
 Follow recent local logs:
 

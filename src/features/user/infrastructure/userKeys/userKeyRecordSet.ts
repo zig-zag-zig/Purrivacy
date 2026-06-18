@@ -2,7 +2,7 @@ import {
     EncryptedKeyRecordWithId,
     EncryptedPayload,
 } from '../../../../core/types';
-import { isPlainObject } from '../../../../infrastructure/firebase/utils.js';
+import { isPlainObject } from '../../../../infrastructure/firebase/utils';
 import { BadRequestError } from '../../../../utils/errors';
 import { EncryptedUserDataValidator } from '../../domain/EncryptedUserDataValidator';
 import {

@@ -1,6 +1,6 @@
 /**
  * Lightweight in-memory Firestore mock for unit tests.
- * Supports: collections, documents (get/set/update/delete), batch writes,
+ * Supports: collections, documents (get/set/update/delete/create), batch writes,
  * transactions, and simple where queries.
  */
 
@@ -80,6 +80,14 @@ export const createFakeFirestore = () => {
             setDoc(this._collection, this.id, data);
         }
 
+        async create(data: any): Promise<void> {
+            const doc = getDoc(this._collection, this.id);
+            if (doc.exists) {
+                throw new Error(`Document ${this._collection}/${this.id} already exists`);
+            }
+            setDoc(this._collection, this.id, data);
+        }
+
         async update(data: any): Promise<void> {
             updateDoc(this._collection, this.id, data);
         }
@@ -100,6 +108,11 @@ export const createFakeFirestore = () => {
             return clone(getDoc(this._ref._collection, this._ref.id).data);
         }
 
+        get(field: string): any {
+            const doc = getDoc(this._ref._collection, this._ref.id);
+            return doc.data ? clone(doc.data[field]) : undefined;
+        }
+
         get ref(): FakeDocumentReference {
             return this._ref;
         }
@@ -107,8 +120,10 @@ export const createFakeFirestore = () => {
 
     class FakeQuerySnapshot {
         readonly docs: FakeDocumentSnapshot[];
+        readonly size: number;
         constructor(docs: FakeDocumentSnapshot[]) {
             this.docs = docs;
+            this.size = docs.length;
         }
     }
 
@@ -121,13 +136,16 @@ export const createFakeFirestore = () => {
             const q = new FakeQuery(this._collection);
             q._filters = [...this._filters, (data: DocData) => {
                 if (!data) return false;
+                const fieldVal = data[field];
+                // Unwrap Timestamp-like objects for comparison (Firestore does this)
+                const cmp = isTimestampLike(fieldVal) ? fieldVal.toDate() : fieldVal;
                 switch (op) {
-                    case '==': return data[field] === value;
-                    case '!=': return data[field] !== value;
-                    case '<': return data[field] < value;
-                    case '<=': return data[field] <= value;
-                    case '>': return data[field] > value;
-                    case '>=': return data[field] >= value;
+                    case '==': return cmp === value;
+                    case '!=': return cmp !== value;
+                    case '<': return cmp < value;
+                    case '<=': return cmp <= value;
+                    case '>': return cmp > value;
+                    case '>=': return cmp >= value;
                     default: return true;
                 }
             }];
@@ -227,8 +245,15 @@ export const createFakeFirestore = () => {
         batch(): FakeWriteBatch {
             return new FakeWriteBatch();
         },
-        async getAll(...refs: FakeDocumentReference[]): Promise<FakeDocumentSnapshot[]> {
-            return refs.map(ref => new FakeDocumentSnapshot(ref));
+        async getAll(
+            ...args: [FakeDocumentReference, ...FakeDocumentReference[]] | [FakeDocumentReference[], { fieldMask?: string[] }]
+        ): Promise<FakeDocumentSnapshot[]> {
+            if (Array.isArray(args[0])) {
+                const refs = args[0] as FakeDocumentReference[];
+                return Promise.resolve(refs.map(ref => new FakeDocumentSnapshot(ref)));
+            }
+            const refs = args as FakeDocumentReference[];
+            return Promise.resolve(refs.map(ref => new FakeDocumentSnapshot(ref)));
         },
         async runTransaction<T>(fn: (tx: FakeTransaction) => Promise<T>): Promise<T> {
             const tx = new FakeTransaction();

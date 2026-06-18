@@ -12,6 +12,7 @@ import {
     parseKeyRecordIdParam,
     parseKeyRecordRequest,
     parseSavePushTokenRequest,
+    parseSetPassphraseStorageRequest,
 } from './userRequests';
 import { EncryptedUserDataValidator } from '../domain/EncryptedUserDataValidator';
 
@@ -80,6 +81,14 @@ router.post('/save-push-token', authenticate('session'), rateLimiter.authenticat
 router.post('/delete-push-token', authenticate('firebase'), rateLimiter.authenticatedWrite, asyncHandler(async (req, res) => {
     const pushToken = parseDeletePushTokenRequest(req.body);
     await UserService.deletePushToken(requireAuthenticatedUserId(req), pushToken);
+    ResponseUtils.noContent(res);
+}));
+
+// Set passphrase storage enabled/disabled
+router.post('/passphrase-storage', authenticate('session'), rateLimiter.authenticatedWrite, asyncHandler(async (req, res) => {
+    const userId = requireAuthenticatedUserId(req);
+    const { enabled } = parseSetPassphraseStorageRequest(req.body);
+    await UserService.setPassphraseStorage(userId, enabled, req.deviceId);
     ResponseUtils.noContent(res);
 }));
 

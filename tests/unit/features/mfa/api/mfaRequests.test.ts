@@ -1,5 +1,9 @@
 import { BadRequestError } from '../../../../../src/utils/errors';
-import { parseMfaEnableRequest, parseSessionTrustRequest } from '../../../../../src/features/mfa/api/mfaRequests';
+import {
+    parseMfaEnableRequest,
+    parseMfaSetupNonceRequest,
+    parseSessionTrustRequest,
+} from '../../../../../src/features/mfa/api/mfaRequests';
 
 describe('mfaRequests', () => {
     it('parses valid MFA enable request with trusted', () => {
@@ -27,6 +31,18 @@ describe('mfaRequests', () => {
 
     it('rejects non-string mfaCode', () => {
         expect(() => parseMfaEnableRequest({ mfaCode: 123456 })).toThrow(BadRequestError);
+    });
+
+    it('parses a valid MFA setup nonce', () => {
+        expect(parseMfaSetupNonceRequest({ nonce: '  ' + 'n'.repeat(43) + '  ' })).toBe('  ' + 'n'.repeat(43) + '  ');
+    });
+
+    it('returns undefined when the MFA setup nonce is absent', () => {
+        expect(parseMfaSetupNonceRequest({})).toBeUndefined();
+    });
+
+    it('passes non-string values through for application-level 401 handling', () => {
+        expect(parseMfaSetupNonceRequest({ nonce: 123456 })).toBe(123456);
     });
 
     it('parseSessionTrustRequest accepts boolean true', () => {

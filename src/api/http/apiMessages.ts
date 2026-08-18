@@ -15,6 +15,10 @@ export const apiMessages = {
         sessionRefresh: 'Too many session refresh attempts. Please try again later.',
         updates: 'Too many updates. Please slow down.',
     },
+    mfa: {
+        freshAuthRequired: 'Fresh authentication is required to start MFA enrollment',
+        nonceInvalid: 'Invalid or expired MFA setup nonce. Please request a new one.',
+    },
     server: {
         internalError: 'Internal server error',
         requestFailed: 'Request failed',

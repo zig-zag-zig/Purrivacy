@@ -280,11 +280,12 @@ All current routes are available under `/v1`.
 | `POST` | `/v1/user/delete-push-token` | Delete an Expo push token |
 | `POST` | `/v1/auth/session` | Create an app session from Firebase auth |
 | `POST` | `/v1/auth/session/refresh` | Refresh an app session |
+| `POST` | `/v1/auth/session/mfa-setup-nonce` | Mint a short-lived, single-use nonce proving fresh authentication (required before MFA setup) |
 | `POST` | `/v1/auth/recovery/challenge` | Request account recovery challenge data |
 | `POST` | `/v1/auth/recovery/token` | Create a recovery access token |
 | `POST` | `/v1/auth/revoke-all-sessions` | Revoke all sessions for the current user |
 | `POST` | `/v1/auth/sign-out` | Revoke the current refresh-token family |
-| `POST` | `/v1/mfa/setup` | Start MFA setup |
+| `POST` | `/v1/mfa/setup` | Start MFA setup (requires a fresh-auth nonce from `/v1/auth/session/mfa-setup-nonce`) |
 | `POST` | `/v1/mfa/enable` | Verify and enable MFA |
 | `POST` | `/v1/mfa/disable` | Disable MFA |
 | `POST` | `/v1/mfa/session/trust` | Update MFA trust for the current session family |
@@ -292,6 +293,15 @@ All current routes are available under `/v1`.
 | `GET` | `/v1/mfa/recovery-codes/remaining` | Get remaining recovery code count |
 
 Authenticated endpoints expect a Bearer token in the `Authorization` header. Device-aware session and push-token flows may also require `X-Device-ID`.
+
+## MFA enrollment flow (fresh-authentication requirement)
+
+MFA setup returns the TOTP secret and recovery codes, so a stolen long-lived session token must not be able to start enrollment. MFA enrollment is therefore a two-step flow:
+
+1. `POST /v1/auth/session/mfa-setup-nonce` mints a **short-lived (5 minute), single-use nonce** bound to the current user and session family. Minting requires **fresh primary authentication**: either the session family was created by a Firebase-authenticated login within the last 10 minutes, or — if the account already has MFA enabled — a valid current TOTP/recovery code is provided in the request body (`mfaCode`). Otherwise the server returns `401` and the client must perform a fresh Firebase sign-in.
+2. `POST /v1/mfa/setup` with `{ "nonce": "..." }` verifies and atomically consumes the nonce (stored server-side only as a SHA-256 hash), then issues the TOTP secret and recovery codes. Replaying, reusing, or presenting an expired or cross-session nonce returns `401`.
+
+All registered devices receive a best-effort push notification when a nonce is minted, so unexpected enrollment attempts are visible to the account owner.
 
 ## Account Recovery
 

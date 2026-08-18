@@ -5,6 +5,7 @@ import { AuthSessionService } from '../application/AuthSessionService';
 import { authenticate, verifySensitiveMfa } from '../../../api/middleware/authMiddleware';
 import { SessionRevocationService } from '../application/SessionRevocationService';
 import { SessionService } from '../application/SessionService';
+import { MfaService } from '../../mfa/application/MfaService';
 import { rateLimiter } from '../../../api/middleware/rateLimiter';
 import {
     requireAuthenticatedUserId,
@@ -14,6 +15,7 @@ import { RecoveryAccessService } from '../../auth/recovery/RecoveryAccessService
 import {
     getBearerToken,
     parseCreateSessionRequest,
+    parseMfaSetupNonceMintRequest,
     parseRecoveryChallengeRequest,
     parseRecoveryTokenRequest,
     parseRefreshSessionRequest,
@@ -43,6 +45,21 @@ router.post('/session/refresh', rateLimiter.sessionRefresh, asyncHandler(async (
     const refreshToken = parseRefreshSessionRequest(req.body);
     const sessionResponse = await AuthSessionService.refreshSession(refreshToken, getBearerToken(req.headers.authorization));
     ResponseUtils.success(res, sessionResponse);
+}));
+
+// Mint a short-lived, single-use nonce proving recent primary authentication,
+// required to start MFA enrollment (API-SEC-006). A long-lived stolen session
+// token alone can no longer begin setup: either the session family was created
+// by a recent Firebase-authenticated login, or the account already has MFA and
+// a valid current code is provided.
+router.post('/session/mfa-setup-nonce', authenticate('session'), rateLimiter.sensitiveOperations, asyncHandler(async (req, res) => {
+    const { mfaCode } = parseMfaSetupNonceMintRequest(req.body);
+    const nonceResult = await MfaService.mintMfaSetupNonce(
+        requireAuthenticatedUserId(req),
+        requireSessionFamilyId(req),
+        mfaCode,
+    );
+    ResponseUtils.success(res, nonceResult);
 }));
 
 router.post('/recovery/challenge', rateLimiter.authentication, asyncHandler(async (req, res) => {

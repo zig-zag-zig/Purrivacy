@@ -14,6 +14,7 @@ export const buildSessionResponse = (
         refreshTokenExpiresAt: refreshTokenExpiresAt.toISOString(),
         mfaTrusted: family.mfaTrusted === true,
         mfaEnabled: family.userHasMfa === true,
+        sessionFamilyId: family.familyId,
     };
 };
 

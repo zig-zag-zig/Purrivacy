@@ -52,8 +52,8 @@ export class SessionService {
         await deleteAccessSession(accessToken);
     }
 
-    static async deleteAllUserSessions(userId: string): Promise<void> {
-        await deleteAllUserSessions(userId);
+    static async deleteAllUserSessions(userId: string, options: { excludeFamilyId?: string } = {}): Promise<void> {
+        await deleteAllUserSessions(userId, options);
     }
 }
 

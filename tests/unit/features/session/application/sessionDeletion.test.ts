@@ -101,4 +101,35 @@ describe('sessionDeletion', () => {
         expect(fakeFs.store.sessions['sess-other-user'].exists).toBe(true);
         expect(fakeFs.store.refreshTokenFamilies['fam-other-user'].exists).toBe(true);
     });
+
+    it('deleteAllUserSessions keeps the excluded family and its records', async () => {
+        const { deleteAllUserSessions } = loadDeletion();
+
+        fakeFs.store.sessions = {
+            'sess-old': { exists: true, data: { userId: 'user-1', refreshTokenFamilyId: 'fam-old' } },
+            'sess-new': { exists: true, data: { userId: 'user-1', refreshTokenFamilyId: 'fam-new' } },
+            'sess-other-user': { exists: true, data: { userId: 'user-2', refreshTokenFamilyId: 'fam-other' } },
+        };
+        fakeFs.store.refreshTokens = {
+            'rt-old': { exists: true, data: { userId: 'user-1', familyId: 'fam-old' } },
+            'rt-new': { exists: true, data: { userId: 'user-1', familyId: 'fam-new' } },
+        };
+        fakeFs.store.refreshTokenFamilies = {
+            'fam-old': { exists: true, data: { userId: 'user-1', familyId: 'fam-old' } },
+            'fam-new': { exists: true, data: { userId: 'user-1', familyId: 'fam-new' } },
+        };
+
+        const count = await deleteAllUserSessions('user-1', { excludeFamilyId: 'fam-new' });
+
+        expect(count).toBe(3);
+        expect(fakeFs.store.sessions['sess-old'].exists).toBe(false);
+        expect(fakeFs.store.refreshTokens['rt-old'].exists).toBe(false);
+        expect(fakeFs.store.refreshTokenFamilies['fam-old'].exists).toBe(false);
+        // The excluded family survives untouched.
+        expect(fakeFs.store.sessions['sess-new'].exists).toBe(true);
+        expect(fakeFs.store.refreshTokens['rt-new'].exists).toBe(true);
+        expect(fakeFs.store.refreshTokenFamilies['fam-new'].exists).toBe(true);
+        // Other users are never touched.
+        expect(fakeFs.store.sessions['sess-other-user'].exists).toBe(true);
+    });
 });

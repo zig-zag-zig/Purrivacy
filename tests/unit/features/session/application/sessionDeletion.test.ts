@@ -62,4 +62,43 @@ describe('sessionDeletion', () => {
         expect(fakeFs.store.refreshTokens['rt-2'].exists).toBe(true);
         expect(fakeFs.store.refreshTokenFamilies['fam-2'].exists).toBe(true);
     });
+
+    it('deleteAllUserSessions sweeps more than 500 records in chunked batches below the Firestore cap', async () => {
+        const { deleteAllUserSessions } = loadDeletion();
+
+        const sessions: Record<string, { exists: boolean; data: Record<string, unknown> }> = {};
+        for (let i = 0; i < 450; i++) {
+            sessions[`sess-${i}`] = { exists: true, data: { userId: 'user-1' } };
+        }
+        sessions['sess-other-user'] = { exists: true, data: { userId: 'user-2' } };
+
+        const tokens: Record<string, { exists: boolean; data: Record<string, unknown> }> = {};
+        for (let i = 0; i < 300; i++) {
+            tokens[`rt-${i}`] = { exists: true, data: { userId: 'user-1' } };
+        }
+
+        const families: Record<string, { exists: boolean; data: Record<string, unknown> }> = {};
+        for (let i = 0; i < 100; i++) {
+            families[`fam-${i}`] = { exists: true, data: { userId: 'user-1' } };
+        }
+        families['fam-other-user'] = { exists: true, data: { userId: 'user-2' } };
+
+        fakeFs.store.sessions = sessions;
+        fakeFs.store.refreshTokens = tokens;
+        fakeFs.store.refreshTokenFamilies = families;
+
+        const batchSpy = jest.spyOn(fakeFs.db, 'batch');
+
+        const count = await deleteAllUserSessions('user-1');
+
+        expect(count).toBe(850);
+
+        // 450 sessions -> 2 chunks (400 + 50), 300 tokens -> 1 chunk, 100 families -> 1 chunk
+        expect(batchSpy).toHaveBeenCalledTimes(4);
+
+        const remainingSessions = Object.values(fakeFs.store.sessions).filter(doc => doc.exists);
+        expect(remainingSessions).toHaveLength(1);
+        expect(fakeFs.store.sessions['sess-other-user'].exists).toBe(true);
+        expect(fakeFs.store.refreshTokenFamilies['fam-other-user'].exists).toBe(true);
+    });
 });

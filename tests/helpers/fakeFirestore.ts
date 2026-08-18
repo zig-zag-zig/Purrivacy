@@ -121,14 +121,17 @@ export const createFakeFirestore = () => {
     class FakeQuerySnapshot {
         readonly docs: FakeDocumentSnapshot[];
         readonly size: number;
+        readonly empty: boolean;
         constructor(docs: FakeDocumentSnapshot[]) {
             this.docs = docs;
             this.size = docs.length;
+            this.empty = docs.length === 0;
         }
     }
 
     class FakeQuery {
         private _filters: Array<(data: DocData) => boolean> = [];
+        private _limit?: number;
 
         constructor(readonly _collection: string) { }
 
@@ -149,6 +152,14 @@ export const createFakeFirestore = () => {
                     default: return true;
                 }
             }];
+            q._limit = this._limit;
+            return q;
+        }
+
+        limit(n: number): FakeQuery {
+            const q = new FakeQuery(this._collection);
+            q._filters = [...this._filters];
+            q._limit = n;
             return q;
         }
 
@@ -159,8 +170,9 @@ export const createFakeFirestore = () => {
                 if (!doc.exists) return false;
                 return this._filters.every(f => f(doc.data));
             });
+            const limited = this._limit !== undefined ? filtered.slice(0, this._limit) : filtered;
             return new FakeQuerySnapshot(
-                filtered.map(([docId]) => new FakeDocumentSnapshot(
+                limited.map(([docId]) => new FakeDocumentSnapshot(
                     new FakeDocumentReference(this._collection, docId),
                 )),
             );

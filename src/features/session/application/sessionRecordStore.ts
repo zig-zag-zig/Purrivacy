@@ -1,6 +1,7 @@
 import { ACCESS_TOKEN_LIFETIME_MS } from '../../../core/constants';
 import { RefreshTokenFamily, Session } from '../../../core/types';
 import { CryptoUtils } from '../../../utils/cryptoUtils';
+import { deletePagedQueryResults } from '../../../infrastructure/firebase/chunkedWrites';
 import { generateOpaqueToken, MAX_ACCESS_TOKEN_LENGTH } from './sessionTokenUtils';
 import { isValidDate, toDate } from './firestoreDate';
 import { sessionCollections } from './sessionCollections';
@@ -73,31 +74,57 @@ export const getValidActiveAccessSession = async (
     };
 };
 
-export const queueFamilyRecordDeletes = async (
-    batch: FirebaseFirestore.WriteBatch,
+/**
+ * Delete a refresh-token family and every record that belongs to it.
+ *
+ * Ordering note: the family document itself is deleted first. It is the
+ * revocation point — `validateBackendSession` rejects access sessions whose
+ * family document is missing, and refresh tokens can no longer resolve it —
+ * so revocation takes effect immediately, before the (potentially large)
+ * child-record sweep. Child records are then deleted in bounded, chunked
+ * pages below the Firestore 500-write batch cap; leftover orphaned records
+ * from a truncated sweep are harmless and are swept by later revocation or
+ * cleanup runs.
+ *
+ * Idempotent by construction: deleting missing documents is a no-op.
+ *
+ * Returns the total number of documents deleted, including the family
+ * document itself.
+ */
+export const deleteFamilyRecords = async (
     familyId: string,
     familyRef: FirebaseFirestore.DocumentReference,
-): Promise<void> => {
-    const [sessionsSnapshot, refreshTokensSnapshot] = await Promise.all([
-        sessionCollections.sessions
-            .where('refreshTokenFamilyId', '==', familyId)
-            .get(),
-        sessionCollections.refreshTokens
-            .where('familyId', '==', familyId)
-            .get(),
-    ]);
+): Promise<number> => {
+    await familyRef.delete();
 
-    sessionsSnapshot.docs.forEach(doc => batch.delete(doc.ref));
-    refreshTokensSnapshot.docs.forEach(doc => batch.delete(doc.ref));
-    batch.delete(familyRef);
+    let deletedCount = 1; // the family document itself
+
+    const queries = [
+        sessionCollections.sessions.where('refreshTokenFamilyId', '==', familyId),
+        sessionCollections.refreshTokens.where('familyId', '==', familyId),
+    ];
+
+    for (const query of queries) {
+        const result = await deletePagedQueryResults(query);
+        deletedCount += result.deletedCount;
+    }
+
+    return deletedCount;
 };
 
-export const queueStaleDeviceFamilyDeletes = async (
-    batch: FirebaseFirestore.WriteBatch,
+/**
+ * Delete every refresh-token family (and its records) registered to the same
+ * device that is not the newly created family. Each stale family is removed
+ * via {@link deleteFamilyRecords}, so arbitrarily many stale families can be
+ * swept without exceeding Firestore batch limits.
+ *
+ * Returns the total number of documents deleted.
+ */
+export const deleteStaleDeviceFamilies = async (
     userId: string,
     deviceId: string,
     newFamilyId: string,
-): Promise<void> => {
+): Promise<number> => {
     const familiesSnapshot = await sessionCollections.refreshTokenFamilies
         .where('deviceId', '==', deviceId)
         .get();
@@ -107,8 +134,11 @@ export const queueStaleDeviceFamilyDeletes = async (
         return familyData.userId === userId && familyData.familyId !== newFamilyId;
     });
 
-    await Promise.all(staleFamilyDocs.map(doc => {
+    let deletedCount = 0;
+    for (const doc of staleFamilyDocs) {
         const familyData = doc.data() as RefreshTokenFamily;
-        return queueFamilyRecordDeletes(batch, familyData.familyId || doc.id, doc.ref);
-    }));
+        deletedCount += await deleteFamilyRecords(familyData.familyId || doc.id, doc.ref);
+    }
+
+    return deletedCount;
 };

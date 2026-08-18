@@ -1,26 +1,30 @@
-import { db } from '../../../infrastructure/firebase';
 import { CryptoUtils } from '../../../utils/cryptoUtils';
+import { deletePagedQueryResults } from '../../../infrastructure/firebase/chunkedWrites';
 import { sessionCollections } from './sessionCollections';
 
 export const deleteAccessSession = async (accessToken: string): Promise<void> => {
     await sessionCollections.sessions.doc(CryptoUtils.sha256(accessToken)).delete();
 };
 
-export const deleteAllUserSessions = async (userId: string): Promise<void> => {
-    const sessionsSnapshot = await sessionCollections.sessions
-        .where('userId', '==', userId)
-        .get();
-    const refreshTokensSnapshot = await sessionCollections.refreshTokens
-        .where('userId', '==', userId)
-        .get();
-    const familiesSnapshot = await sessionCollections.refreshTokenFamilies
-        .where('userId', '==', userId)
-        .get();
+/**
+ * Delete every session, refresh token and refresh-token family record for a
+ * user. Records are deleted in bounded, chunked pages so the operation works
+ * regardless of how many records have accumulated (Firestore batches cap at
+ * 500 writes). Idempotent by construction: a second run simply deletes what
+ * remains.
+ */
+export const deleteAllUserSessions = async (userId: string): Promise<number> => {
+    const queries = [
+        sessionCollections.sessions.where('userId', '==', userId),
+        sessionCollections.refreshTokens.where('userId', '==', userId),
+        sessionCollections.refreshTokenFamilies.where('userId', '==', userId),
+    ];
 
-    const batch = db.batch();
-    sessionsSnapshot.docs.forEach(doc => batch.delete(doc.ref));
-    refreshTokensSnapshot.docs.forEach(doc => batch.delete(doc.ref));
-    familiesSnapshot.docs.forEach(doc => batch.delete(doc.ref));
-    await batch.commit();
+    let deletedCount = 0;
+    for (const query of queries) {
+        const result = await deletePagedQueryResults(query);
+        deletedCount += result.deletedCount;
+    }
+
+    return deletedCount;
 };
-

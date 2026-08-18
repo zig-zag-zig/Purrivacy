@@ -33,6 +33,13 @@ export class CryptoUtils {
     }
 
     /**
+     * Keyed HMAC-SHA256 hash
+     */
+    static hmacSha256(key: string, data: string): string {
+        return crypto.createHmac('sha256', key).update(data).digest('hex');
+    }
+
+    /**
      * Compare two strings without leaking timing information.
      */
     static timingSafeEqual(a: string, b: string): boolean {

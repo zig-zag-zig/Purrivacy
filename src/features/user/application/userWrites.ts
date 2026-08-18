@@ -7,6 +7,7 @@ import { EncryptedUserDataValidator } from '../domain/EncryptedUserDataValidator
 import { deleteUserEncryptedKeys, initializeUserEncryptedKeyRecords } from '../infrastructure/UserKeyRepository';
 import { getUserRef, getUserWithFieldMask } from '../infrastructure/UserRepository';
 import { deleteUserPushTokensFromDb } from '../../notification/infrastructure/pushTokenStore';
+import { pepperRecoveryVerifierHash } from '../../auth/recovery/recoveryVerifierHash';
 
 const logger = createLogger('features.user.writes');
 
@@ -34,6 +35,8 @@ export const createUser = async (
 
     const sanitizedUser = EncryptedUserDataValidator.sanitizeUserForCreate(user, env.userMaxKeyRecords);
     const { keys, ...userDocument } = sanitizedUser;
+    // Store the recovery verifier hash server-side peppered and versioned (API-SEC-010).
+    userDocument.recoveryVerifierHash = pepperRecoveryVerifierHash(userDocument.recoveryVerifierHash);
     await userRef.create(userDocument);
 
     try {

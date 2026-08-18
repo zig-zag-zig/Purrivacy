@@ -1,5 +1,6 @@
 import {
     EncryptedPayload,
+    KeyRecordListOptions,
     User,
     UserEncryptedData,
     UserEncryptedKeyRecordsResponse,
@@ -83,10 +84,12 @@ export class UserService {
 
     static async getEncryptedKeyRecords(
         userId: string,
+        options: KeyRecordListOptions = {},
     ): Promise<UserEncryptedKeyRecordsResponse> {
-        const recordSet = await readUserEncryptedKeyRecordSet(userId);
+        const recordSet = await readUserEncryptedKeyRecordSet(userId, options);
         return {
             keys: recordSet.keys.map(flattenKeyRecord),
+            nextCursor: recordSet.nextCursor,
         };
     }
 

@@ -1,6 +1,7 @@
 import { BadRequestError } from '../../../../../src/utils/errors';
 import {
     parseCreateUserRequest,
+    parseKeyRecordListQuery,
     parseKeyRecordRequest,
     parseSavePushTokenRequest,
     parseDeletePushTokenRequest,
@@ -27,6 +28,56 @@ describe('userRequests', () => {
 
         it('throws when key is missing', () => {
             expect(() => parseKeyRecordRequest({})).toThrow(BadRequestError);
+        });
+    });
+
+    describe('parseKeyRecordListQuery', () => {
+        it('returns empty options for an empty query', () => {
+            expect(parseKeyRecordListQuery({})).toEqual({});
+        });
+
+        it('parses limit, cursor and since', () => {
+            expect(parseKeyRecordListQuery({
+                limit: '50',
+                cursor: '1234:r0001',
+                since: '1000',
+            })).toEqual({
+                limit: 50,
+                cursor: '1234:r0001',
+                since: 1000,
+            });
+        });
+
+        it('accepts a zero since', () => {
+            expect(parseKeyRecordListQuery({ since: '0' })).toEqual({ since: 0 });
+        });
+
+        it('rejects a non-numeric limit', () => {
+            expect(() => parseKeyRecordListQuery({ limit: 'abc' })).toThrow(BadRequestError);
+        });
+
+        it('rejects a limit below 1', () => {
+            expect(() => parseKeyRecordListQuery({ limit: '0' })).toThrow(BadRequestError);
+        });
+
+        it('rejects a limit above the maximum page size', () => {
+            expect(() => parseKeyRecordListQuery({ limit: '501' })).toThrow(BadRequestError);
+        });
+
+        it('rejects an empty cursor', () => {
+            expect(() => parseKeyRecordListQuery({ cursor: '  ' })).toThrow(BadRequestError);
+        });
+
+        it('rejects a non-numeric since', () => {
+            expect(() => parseKeyRecordListQuery({ since: 'yesterday' })).toThrow(BadRequestError);
+        });
+
+        it('rejects a non-integer since', () => {
+            expect(() => parseKeyRecordListQuery({ since: '1.5' })).toThrow(BadRequestError);
+        });
+
+        it('rejects a negative since', () => {
+            expect(() => parseKeyRecordListQuery({ since: '-1' })).toThrow(BadRequestError);
         });
     });
 

@@ -180,6 +180,38 @@ describe('env parsing functions', () => {
         });
     });
 
+    describe('userMaxKeyRecords', () => {
+        it('defaults to 1000 when unset', () => {
+            jest.resetModules();
+            delete process.env.USER_MAX_KEY_RECORDS;
+            expect(require('../../../src/config/env').env.userMaxKeyRecords).toBe(1000);
+        });
+
+        it('parses a valid configured value', () => {
+            jest.resetModules();
+            process.env.USER_MAX_KEY_RECORDS = '250';
+            expect(require('../../../src/config/env').env.userMaxKeyRecords).toBe(250);
+        });
+
+        it('clamps values above the hard ceiling of 5000', () => {
+            jest.resetModules();
+            process.env.USER_MAX_KEY_RECORDS = '99999';
+            expect(require('../../../src/config/env').env.userMaxKeyRecords).toBe(5000);
+        });
+
+        it('returns the fallback for values below 1', () => {
+            jest.resetModules();
+            process.env.USER_MAX_KEY_RECORDS = '0';
+            expect(require('../../../src/config/env').env.userMaxKeyRecords).toBe(1000);
+        });
+
+        it('returns the fallback for non-numeric values', () => {
+            jest.resetModules();
+            process.env.USER_MAX_KEY_RECORDS = 'many';
+            expect(require('../../../src/config/env').env.userMaxKeyRecords).toBe(1000);
+        });
+    });
+
     describe('rate limit store configuration', () => {
         it('defaults to the memory store', () => {
             jest.resetModules();

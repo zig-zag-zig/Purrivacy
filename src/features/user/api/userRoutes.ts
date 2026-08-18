@@ -10,6 +10,7 @@ import {
     parseCreateUserRequest,
     parseDeletePushTokenRequest,
     parseKeyRecordIdParam,
+    parseKeyRecordListQuery,
     parseKeyRecordRequest,
     parseSavePushTokenRequest,
     parseSetPassphraseStorageRequest,
@@ -34,7 +35,10 @@ router.post('', authenticate('firebase'), rateLimiter.authenticatedWrite, asyncH
 }));
 
 router.get('/key-records', authenticate('session'), rateLimiter.authenticatedRead, asyncHandler(async (req, res) => {
-    const response = await UserService.getEncryptedKeyRecords(requireAuthenticatedUserId(req));
+    const response = await UserService.getEncryptedKeyRecords(
+        requireAuthenticatedUserId(req),
+        parseKeyRecordListQuery(req.query),
+    );
     ResponseUtils.success(res, response);
 }));
 

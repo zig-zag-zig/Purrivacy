@@ -6,7 +6,10 @@ import {
     RECOVERY_CODE_COUNT,
     MFA_SETUP_EXPIRY_MINUTES,
     AUTO_REGENERATE_THRESHOLD,
+    DEFAULT_MAX_KEYS_PER_USER,
+    DEFAULT_KEY_RECORDS_PAGE_SIZE,
     MAX_KEYS_PER_USER,
+    MAX_KEY_RECORDS_PAGE_SIZE,
     MAX_ENCRYPTED_KEY_DATA_LENGTH,
     MAX_ENCRYPTED_KEYS_TRANSFER_LENGTH,
     MAX_DEK_ENCRYPTED_DATA_LENGTH,
@@ -44,6 +47,18 @@ describe('constants', () => {
 
     it('MAX_KEYS_PER_USER is 5000', () => {
         expect(MAX_KEYS_PER_USER).toBe(5000);
+    });
+
+    it('DEFAULT_MAX_KEYS_PER_USER is 1000', () => {
+        expect(DEFAULT_MAX_KEYS_PER_USER).toBe(1000);
+    });
+
+    it('DEFAULT_KEY_RECORDS_PAGE_SIZE is 200', () => {
+        expect(DEFAULT_KEY_RECORDS_PAGE_SIZE).toBe(200);
+    });
+
+    it('MAX_KEY_RECORDS_PAGE_SIZE is 500', () => {
+        expect(MAX_KEY_RECORDS_PAGE_SIZE).toBe(500);
     });
 
     it('MAX_ENCRYPTED_KEY_DATA_LENGTH is 1_000_000', () => {

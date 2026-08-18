@@ -11,6 +11,13 @@ export interface EncryptedKeyRecordWithId {
 
 export interface UserEncryptedKeyRecordsResponse {
     keys: Array<EncryptedPayload & { recordId: string }>;
+    nextCursor?: string;
+}
+
+export interface KeyRecordListOptions {
+    limit?: number;
+    cursor?: string;
+    since?: number;
 }
 
 export interface UserRecoveryEncryptedData {

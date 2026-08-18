@@ -1,6 +1,6 @@
 # Purrivacy Docker Deployment Notes
 
-Purrivacy is deployed as a separate Docker Compose project from Pawify. It does not use Dapr or Redis.
+Purrivacy is deployed as a separate Docker Compose project from Pawify. It does not use Dapr. Redis is optional: the default deployment uses process-local rate limiting (`RATE_LIMIT_STORE=memory`); set `RATE_LIMIT_STORE=redis` with `REDIS_URL` (e.g. Upstash/Memorystore) to share rate-limit counters across replicas — see README → Configuration.
 
 ## Container Hardening
 

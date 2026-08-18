@@ -133,6 +133,22 @@ const parseRateLimitStore = (value: string | undefined): 'memory' | 'redis' => {
     return value?.trim().toLowerCase() === 'redis' ? 'redis' : 'memory';
 };
 
+/**
+ * Selecting the shared Redis store requires an explicit REDIS_URL: refusing
+ * to start beats silently defaulting to a local Redis instance and surfacing
+ * the misconfiguration as 503s on the first request (quality review HQ-01).
+ */
+const parseRateLimitStoreSelection = (
+    storeValue: string | undefined,
+    redisUrlValue: string | undefined,
+): 'memory' | 'redis' => {
+    const store = parseRateLimitStore(storeValue);
+    if (store === 'redis' && !redisUrlValue?.trim()) {
+        throw new Error('[env] RATE_LIMIT_STORE=redis requires REDIS_URL to be set');
+    }
+    return store;
+};
+
 const HEX_64_RE = /^[0-9a-f]{64}$/i;
 const BYTE_SIZE_RE = /^(\d+(?:\.\d+)?)\s*(b|kb|mb|gb)?$/i;
 const DEFAULT_REQUEST_JSON_LIMIT = '10mb';
@@ -344,7 +360,7 @@ export const env = {
     requestJsonLimitBytes: jsonBodyLimit.limitBytes,
     requestFormLimit: formBodyLimit.limit,
     requestFormLimitBytes: formBodyLimit.limitBytes,
-    rateLimitStore: parseRateLimitStore(process.env.RATE_LIMIT_STORE),
+    rateLimitStore: parseRateLimitStoreSelection(process.env.RATE_LIMIT_STORE, process.env.REDIS_URL),
     redisUrl: parseOptionalStringEnv('REDIS_URL'),
     rateLimitFailClosed: parseBooleanEnv('RATE_LIMIT_FAIL_CLOSED', isProduction),
     userMaxKeyRecords: parseBoundedNumberEnv('USER_MAX_KEY_RECORDS', DEFAULT_MAX_KEYS_PER_USER, 1, MAX_KEYS_PER_USER),

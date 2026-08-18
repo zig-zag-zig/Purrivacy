@@ -248,7 +248,17 @@ describe('env parsing functions', () => {
         it('selects the redis store', () => {
             jest.resetModules();
             process.env.RATE_LIMIT_STORE = 'redis';
+            process.env.REDIS_URL = 'redis://cache:6379';
             expect(require('../../../src/config/env').env.rateLimitStore).toBe('redis');
+        });
+
+        it('refuses to select the redis store without REDIS_URL (no silent localhost default)', () => {
+            jest.resetModules();
+            process.env.RATE_LIMIT_STORE = 'redis';
+            delete process.env.REDIS_URL;
+            expect(() => require('../../../src/config/env')).toThrow(
+                'RATE_LIMIT_STORE=redis requires REDIS_URL',
+            );
         });
 
         it('parses REDIS_URL', () => {

@@ -8,7 +8,8 @@ import { getClientIp } from './clientIp';
 import { rateLimitKeys } from './rateLimitKeys';
 import { MemoryRateLimitStore } from './memoryRateLimitStore';
 import { getRateLimitStore } from './rateLimitStoreFactory';
-import { RateLimitConfig, RateLimitUnavailableError } from './rateLimitTypes';
+import { RateLimitUnavailableError } from '../../utils/errors';
+import { RateLimitConfig } from './rateLimitTypes';
 import { RateLimitCounterResult, RateLimitStore } from './rateLimitStoreTypes';
 
 const logger = createLogger('api.rateLimit');

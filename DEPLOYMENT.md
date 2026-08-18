@@ -2,6 +2,16 @@
 
 Purrivacy is deployed as a separate Docker Compose project from Pawify. It does not use Dapr or Redis.
 
+## Container Hardening
+
+The production service runs with:
+
+- Base image pinned by digest (`node:22-bookworm-slim@sha256:...`) — bump the digest deliberately when patching, and enable automated base-image rebuilds (e.g. Dependabot/Renovate on the Dockerfile).
+- `read_only: true` root filesystem with a small tmpfs at `/tmp`.
+- All Linux capabilities dropped (`cap_drop: [ALL]`) and `no-new-privileges:true`.
+- `init: true` (tini) for PID-1 signal handling and zombie reaping; the image `CMD` runs `node` directly so `SIGTERM` reaches the app's graceful-shutdown path (HTTP close, maintenance stop, rate-limit store close, Sentry flush).
+- Non-root `nodeapp` user, loopback-only host binding, memory/CPU/PID limits, read-only secrets mount (pre-existing).
+
 ## Host Route
 
 Your VPS-level tunnel or reverse proxy should keep pointing at:

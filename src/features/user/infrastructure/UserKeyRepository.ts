@@ -195,6 +195,15 @@ export const updateUserEncryptedKeyRecord = async (
         throw new NotFoundError('Key record not found');
     }
 
+    // Guard (oracle review NEW-4): if the whole record set was deleted
+    // concurrently, the transaction's null-branch may have committed an empty
+    // set. Verify the record actually exists so we never report success for a
+    // write that did not land.
+    const stored = await ref.child(`${USER_KEY_ITEMS_CHILD}/${recordId}`).get();
+    if (!stored.exists()) {
+        throw new NotFoundError('Key record not found');
+    }
+
     return { recordId, key: sanitized };
 };
 

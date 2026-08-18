@@ -46,7 +46,7 @@ export class MemoryRateLimitStore implements RateLimitStore {
         return { count: entry.count, resetTime: entry.resetTime };
     }
 
-    async decrement(key: string): Promise<void> {
+    async decrement(key: string, _windowMs: number): Promise<void> {
         const entry = this.entries.get(key);
         if (entry && entry.count > 0) {
             entry.count -= 1;

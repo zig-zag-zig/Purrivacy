@@ -25,13 +25,13 @@ describe('MemoryRateLimitStore', () => {
     it('decrements a counter and floors at zero', async () => {
         const store = new MemoryRateLimitStore();
         await store.increment('key', 60_000);
-        await store.decrement('key');
+        await store.decrement('key', 60_000);
 
         const result = await store.increment('key', 60_000);
         expect(result.count).toBe(1);
 
-        await store.decrement('key');
-        await store.decrement('key');
+        await store.decrement('key', 60_000);
+        await store.decrement('key', 60_000);
         const after = await store.increment('key', 60_000);
         expect(after.count).toBe(1);
     });

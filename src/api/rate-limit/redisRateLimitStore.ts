@@ -21,14 +21,15 @@ return {current, ttl}
 `;
 
 /**
- * Refund a successful request. Floors at zero; a zeroed key still gets a new
- * expiry on its next INCR because the increment script treats count==1 as a
- * fresh window.
+ * Refund a successful request. Floors at zero; a zeroed key is re-anchored
+ * to the window TTL so the refund can never leave a key that never expires
+ * (only the INCR path would otherwise set an expiry).
  */
 const DECREMENT_SCRIPT = `
 local current = redis.call('DECR', KEYS[1])
 if current < 0 then
   redis.call('SET', KEYS[1], 0)
+  redis.call('PEXPIRE', KEYS[1], ARGV[1])
 end
 return current
 `;
@@ -73,8 +74,8 @@ export class RedisRateLimitStore implements RateLimitStore {
         return { count, resetTime };
     }
 
-    async decrement(key: string): Promise<void> {
-        await this.client.eval(DECREMENT_SCRIPT, 1, `${KEY_PREFIX}${key}`);
+    async decrement(key: string, windowMs: number): Promise<void> {
+        await this.client.eval(DECREMENT_SCRIPT, 1, `${KEY_PREFIX}${key}`, windowMs);
     }
 
     async close(): Promise<void> {

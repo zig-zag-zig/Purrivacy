@@ -23,9 +23,11 @@ export interface RateLimitStore {
 
     /**
      * Decrement the counter for `key` (used to refund successful requests).
-     * Must never go below zero.
+     * Must never go below zero. Implementations that recreate the key while
+     * flooring must re-anchor its expiry to `windowMs` so no key is left
+     * without a TTL.
      */
-    decrement(key: string): Promise<void>;
+    decrement(key: string, windowMs: number): Promise<void>;
 
     /** Release any underlying connections. Safe to call multiple times. */
     close?(): Promise<void>;

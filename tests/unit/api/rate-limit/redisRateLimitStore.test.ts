@@ -83,7 +83,7 @@ describe('RedisRateLimitStore', () => {
         const store = new RedisRateLimitStore('redis://example:6379');
         const client = lastClient();
 
-        await store.decrement('user:1');
+        await store.decrement('user:1', 60_000);
 
         const [script, numKeys, key] = client.eval.mock.calls[0];
         expect(numKeys).toBe(1);

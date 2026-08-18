@@ -102,7 +102,7 @@ const attachResponseAdjustment = (
             return;
         }
 
-        void store.decrement(key)
+        void store.decrement(key, config.windowMs)
             .then(() => {
                 adjustedCount = Math.max(0, adjustedCount - 1);
             })

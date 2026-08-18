@@ -4,7 +4,13 @@ import { RateLimitCounterResult, RateLimitStore } from './rateLimitStoreTypes';
 
 const logger = createLogger('api.rateLimit.redis');
 
-const KEY_PREFIX = 'rl:';
+/**
+ * Key namespace. App-specific because this Redis instance may be shared
+ * with other services on the same VPS (e.g. Pawify's Dapr state/lock keys);
+ * the prefix guarantees Purrivacy can never read, overwrite, or evict
+ * another service's keys (or vice versa).
+ */
+const KEY_PREFIX = 'purrivacy:rl:';
 
 /**
  * Atomic fixed-window increment: INCR the counter and set an expiry only when

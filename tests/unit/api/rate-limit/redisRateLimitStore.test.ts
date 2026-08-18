@@ -57,7 +57,7 @@ describe('RedisRateLimitStore', () => {
         expect(client.eval).toHaveBeenCalledTimes(1);
         const [script, numKeys, key, windowMs] = client.eval.mock.calls[0];
         expect(numKeys).toBe(1);
-        expect(key).toBe('rl:user:1');
+        expect(key).toBe('purrivacy:rl:user:1');
         expect(windowMs).toBe(60_000);
         expect(script).toContain('INCR');
         expect(script).toContain('PEXPIRE');
@@ -87,7 +87,7 @@ describe('RedisRateLimitStore', () => {
 
         const [script, numKeys, key] = client.eval.mock.calls[0];
         expect(numKeys).toBe(1);
-        expect(key).toBe('rl:user:1');
+        expect(key).toBe('purrivacy:rl:user:1');
         expect(script).toContain('DECR');
     });
 

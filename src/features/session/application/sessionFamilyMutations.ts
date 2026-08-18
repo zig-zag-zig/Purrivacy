@@ -1,9 +1,8 @@
 import * as admin from 'firebase-admin';
-import { db } from '../../../infrastructure/firebase';
 import { RefreshTokenFamily } from '../../../core/types';
 import { AuthError } from '../../../utils/errors';
 import { sessionCollections } from './sessionCollections';
-import { queueFamilyRecordDeletes } from './sessionRecordStore';
+import { deleteFamilyRecords } from './sessionRecordStore';
 
 const getOwnedFamilyRef = async (familyId: string, userId: string) => {
     if (!familyId) {
@@ -76,8 +75,9 @@ export const revokeSessionFamily = async (
         throw new AuthError('Session invalid', { sessionInvalid: true }, 401);
     }
 
-    const batch = db.batch();
-    await queueFamilyRecordDeletes(batch, familyId, familyRef);
-    await batch.commit();
+    // The family document is deleted first (revocation point), then its
+    // child records are swept in bounded, chunked pages below the Firestore
+    // 500-write batch cap.
+    await deleteFamilyRecords(familyId, familyRef);
 };
 

@@ -143,4 +143,81 @@ describe('env parsing functions', () => {
             expect(env.authEmailDomain).toBe('example.com');
         });
     });
+
+    describe('parseTrustProxy', () => {
+        it('accepts legacy boolean values', () => {
+            jest.resetModules();
+            process.env.TRUST_PROXY = 'true';
+            expect(require('../../../src/config/env').env.trustProxy).toBe(true);
+
+            jest.resetModules();
+            process.env.TRUST_PROXY = 'false';
+            expect(require('../../../src/config/env').env.trustProxy).toBe(false);
+        });
+
+        it('accepts loopback', () => {
+            jest.resetModules();
+            process.env.TRUST_PROXY = 'loopback';
+            expect(require('../../../src/config/env').env.trustProxy).toBe('loopback');
+        });
+
+        it('accepts a hop count', () => {
+            jest.resetModules();
+            process.env.TRUST_PROXY = '2';
+            expect(require('../../../src/config/env').env.trustProxy).toBe(2);
+        });
+
+        it('accepts a comma-separated list of trusted subnets', () => {
+            jest.resetModules();
+            process.env.TRUST_PROXY = '10.0.0.0/8, 127.0.0.1';
+            expect(require('../../../src/config/env').env.trustProxy).toEqual(['10.0.0.0/8', '127.0.0.1']);
+        });
+
+        it('falls back to false for unrecognized values', () => {
+            jest.resetModules();
+            process.env.TRUST_PROXY = 'garbage-value';
+            expect(require('../../../src/config/env').env.trustProxy).toBe(false);
+        });
+    });
+
+    describe('rate limit store configuration', () => {
+        it('defaults to the memory store', () => {
+            jest.resetModules();
+            delete process.env.RATE_LIMIT_STORE;
+            expect(require('../../../src/config/env').env.rateLimitStore).toBe('memory');
+        });
+
+        it('selects the redis store', () => {
+            jest.resetModules();
+            process.env.RATE_LIMIT_STORE = 'redis';
+            expect(require('../../../src/config/env').env.rateLimitStore).toBe('redis');
+        });
+
+        it('parses REDIS_URL', () => {
+            jest.resetModules();
+            process.env.REDIS_URL = 'redis://cache:6379';
+            expect(require('../../../src/config/env').env.redisUrl).toBe('redis://cache:6379');
+        });
+
+        it('defaults RATE_LIMIT_FAIL_CLOSED to true in production', () => {
+            jest.resetModules();
+            process.env.NODE_ENV = 'production';
+            delete process.env.RATE_LIMIT_FAIL_CLOSED;
+            expect(require('../../../src/config/env').env.rateLimitFailClosed).toBe(true);
+        });
+
+        it('defaults RATE_LIMIT_FAIL_CLOSED to false outside production', () => {
+            jest.resetModules();
+            process.env.NODE_ENV = 'test';
+            delete process.env.RATE_LIMIT_FAIL_CLOSED;
+            expect(require('../../../src/config/env').env.rateLimitFailClosed).toBe(false);
+        });
+
+        it('honors an explicit RATE_LIMIT_FAIL_CLOSED value', () => {
+            jest.resetModules();
+            process.env.NODE_ENV = 'test';
+            process.env.RATE_LIMIT_FAIL_CLOSED = 'true';
+            expect(require('../../../src/config/env').env.rateLimitFailClosed).toBe(true);
+        });
+    });
 });

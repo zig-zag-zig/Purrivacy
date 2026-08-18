@@ -84,6 +84,23 @@ export const createFakeRealtimeDatabase = () => {
     async remove(): Promise<void> {
       setPath(this.path, null);
     }
+
+    /**
+     * Minimal RTDB transaction simulation: invokes the update function with the
+     * current value (or null) and either commits the returned value or aborts
+     * when the function returns undefined. The body is fully synchronous, so
+     * concurrent callers naturally serialize — mirroring RTDB's per-location
+     * transaction atomicity well enough for quota-concurrency tests.
+     */
+    async transaction(updateFn: (current: any) => any): Promise<{ committed: boolean; snapshot: FakeSnapshot }> {
+      const current = getPath(this.path);
+      const next = updateFn(current);
+      if (next === undefined) {
+        return { committed: false, snapshot: new FakeSnapshot(getPath(this.path)) };
+      }
+      setPath(this.path, next);
+      return { committed: true, snapshot: new FakeSnapshot(getPath(this.path)) };
+    }
   }
 
   return {

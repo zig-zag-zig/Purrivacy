@@ -65,3 +65,9 @@ export class MfaNotEnabledError extends BadRequestError {
         super('MFA is not enabled for this user', details);
     }
 }
+
+export class KeyQuotaExceededError extends ConflictError {
+    constructor(details?: Record<string, unknown>) {
+        super('Key record quota exceeded', details);
+    }
+}

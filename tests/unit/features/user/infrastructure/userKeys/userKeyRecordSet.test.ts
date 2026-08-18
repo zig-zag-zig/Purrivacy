@@ -1,8 +1,12 @@
 import {
     createEmptyUserEncryptedKeyRecordSet,
+    decodeKeyRecordCursor,
+    encodeKeyRecordCursor,
+    paginateUserEncryptedKeyRecords,
     sanitizeUserEncryptedKeyItems,
     sanitizeUserEncryptedKeyRecordSet,
     toEncryptedKeyRecords,
+    toUserEncryptedKeyRecordEntries,
 } from '../../../../../../src/features/user/infrastructure/userKeys/userKeyRecordSet';
 import { BadRequestError } from '../../../../../../src/utils/errors';
 
@@ -15,6 +19,11 @@ const validPayload = (suffix: string) => ({
     encryptedData: Buffer.from(`payload-${suffix}`, 'utf8').toString('base64'),
     iv: 'a'.repeat(24),
     tag: 'b'.repeat(32),
+});
+
+const withUpdatedAt = (payload: ReturnType<typeof validPayload>, updatedAt: number) => ({
+    ...payload,
+    updatedAt,
 });
 
 describe('userKeyRecordSet', () => {
@@ -48,6 +57,20 @@ describe('userKeyRecordSet', () => {
         it('sanitizes valid key records and validates record IDs', () => {
             const items = sanitizeUserEncryptedKeyItems({
                 validKey: validPayload('AA'),
+            });
+            expect(items.validKey).toEqual(validPayload('AA'));
+        });
+
+        it('preserves numeric updatedAt metadata', () => {
+            const items = sanitizeUserEncryptedKeyItems({
+                validKey: withUpdatedAt(validPayload('AA'), 1234),
+            });
+            expect(items.validKey).toEqual(withUpdatedAt(validPayload('AA'), 1234));
+        });
+
+        it('drops non-numeric updatedAt metadata', () => {
+            const items = sanitizeUserEncryptedKeyItems({
+                validKey: { ...validPayload('AA'), updatedAt: 'garbage' },
             });
             expect(items.validKey).toEqual(validPayload('AA'));
         });
@@ -96,8 +119,112 @@ describe('userKeyRecordSet', () => {
             ]);
         });
 
+        it('strips server-side metadata from the API shape', () => {
+            const records = toEncryptedKeyRecords({
+                k1: withUpdatedAt(validPayload('AA'), 1234),
+            });
+            expect(records).toEqual([{ recordId: 'k1', key: validPayload('AA') }]);
+        });
+
         it('returns empty array for empty items', () => {
             expect(toEncryptedKeyRecords({})).toEqual([]);
+        });
+    });
+
+    describe('toUserEncryptedKeyRecordEntries', () => {
+        it('keeps updatedAt metadata for internal pagination', () => {
+            const entries = toUserEncryptedKeyRecordEntries({
+                k1: withUpdatedAt(validPayload('AA'), 1234),
+                k2: validPayload('BB'),
+            });
+            expect(entries).toEqual([
+                { recordId: 'k1', key: validPayload('AA'), updatedAt: 1234 },
+                { recordId: 'k2', key: validPayload('BB'), updatedAt: undefined },
+            ]);
+        });
+    });
+
+    describe('cursor codec', () => {
+        it('encodes updatedAt and recordId', () => {
+            expect(encodeKeyRecordCursor({ recordId: 'r0001', updatedAt: 1234 })).toBe('1234:r0001');
+        });
+
+        it('encodes legacy records with effective updatedAt 0', () => {
+            expect(encodeKeyRecordCursor({ recordId: 'r0001' })).toBe('0:r0001');
+        });
+
+        it('decodes a valid cursor', () => {
+            expect(decodeKeyRecordCursor('1234:r0001')).toEqual({ updatedAt: 1234, recordId: 'r0001' });
+        });
+
+        it('rejects malformed cursors', () => {
+            expect(decodeKeyRecordCursor('')).toBeNull();
+            expect(decodeKeyRecordCursor(':r0001')).toBeNull();
+            expect(decodeKeyRecordCursor('abc:r0001')).toBeNull();
+            expect(decodeKeyRecordCursor('1234:')).toBeNull();
+            expect(decodeKeyRecordCursor('1234')).toBeNull();
+        });
+    });
+
+    describe('paginateUserEncryptedKeyRecords', () => {
+        const entry = (recordId: string, updatedAt?: number) => ({
+            recordId,
+            key: validPayload(recordId),
+            updatedAt,
+        });
+
+        it('returns an empty page for no records', () => {
+            expect(paginateUserEncryptedKeyRecords([], { limit: 200 })).toEqual({ records: [] });
+        });
+
+        it('sorts by updatedAt then recordId and emits a nextCursor when truncated', () => {
+            const records = [
+                entry('b', 200),
+                entry('a', 100),
+                entry('c', 200),
+                entry('d', 300),
+            ];
+            const page = paginateUserEncryptedKeyRecords(records, { limit: 2 });
+
+            expect(page.records.map(record => record.recordId)).toEqual(['a', 'b']);
+            expect(page.nextCursor).toBe('200:b');
+        });
+
+        it('pages through the whole set with a cursor', () => {
+            const records = [entry('a', 100), entry('b', 200), entry('c', 200), entry('d', 300)];
+            const first = paginateUserEncryptedKeyRecords(records, { limit: 2 });
+            const second = paginateUserEncryptedKeyRecords(records, { limit: 2, cursor: first.nextCursor });
+
+            expect(second.records.map(record => record.recordId)).toEqual(['c', 'd']);
+            expect(second.nextCursor).toBeUndefined();
+        });
+
+        it('skips forward when the cursor record was deleted', () => {
+            const records = [entry('a', 100), entry('c', 200), entry('d', 300)];
+            const second = paginateUserEncryptedKeyRecords(records, { limit: 2, cursor: '200:b' });
+
+            expect(second.records.map(record => record.recordId)).toEqual(['c', 'd']);
+        });
+
+        it('filters by since and includes legacy records', () => {
+            const records = [entry('legacy'), entry('old', 100), entry('new', 300)];
+            const page = paginateUserEncryptedKeyRecords(records, { limit: 200, since: 200 });
+
+            expect(page.records.map(record => record.recordId)).toEqual(['legacy', 'new']);
+        });
+
+        it('throws for a malformed cursor', () => {
+            expect(() => paginateUserEncryptedKeyRecords(
+                [entry('a', 100)],
+                { limit: 10, cursor: 'garbage' },
+            )).toThrow(BadRequestError);
+        });
+
+        it('throws for a cursor with an invalid record id', () => {
+            expect(() => paginateUserEncryptedKeyRecords(
+                [entry('a', 100)],
+                { limit: 10, cursor: '100:bad.key' },
+            )).toThrow(BadRequestError);
         });
     });
 });

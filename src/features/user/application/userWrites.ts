@@ -1,4 +1,5 @@
 import { db } from '../../../infrastructure/firebase';
+import { env } from '../../../config/env';
 import { ConflictError } from '../../../utils/errors';
 import { createLogger } from '../../../utils/logger';
 import { NotificationService } from '../../notification/application/NotificationService';
@@ -31,7 +32,7 @@ export const createUser = async (
         throw new ConflictError('User already exists');
     }
 
-    const sanitizedUser = EncryptedUserDataValidator.sanitizeUserForCreate(user);
+    const sanitizedUser = EncryptedUserDataValidator.sanitizeUserForCreate(user, env.userMaxKeyRecords);
     const { keys, ...userDocument } = sanitizedUser;
     await userRef.create(userDocument);
 

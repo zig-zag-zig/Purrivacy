@@ -1,4 +1,8 @@
 import dotenv from 'dotenv';
+import {
+    DEFAULT_MAX_KEYS_PER_USER,
+    MAX_KEYS_PER_USER,
+} from '../core/constants';
 
 dotenv.config();
 
@@ -22,6 +26,20 @@ const parseNumberEnv = (name: string, fallback: number, min = 0): number => {
     }
 
     return parsed;
+};
+
+const parseBoundedNumberEnv = (name: string, fallback: number, min: number, max: number): number => {
+    const value = process.env[name]?.trim();
+    if (!value) {
+        return fallback;
+    }
+
+    const parsed = Number.parseInt(value, 10);
+    if (!Number.isFinite(parsed) || parsed < min) {
+        return fallback;
+    }
+
+    return Math.min(parsed, max);
 };
 
 const parseCsvEnv = (name: string): string[] => (
@@ -129,6 +147,7 @@ export const env = {
     rateLimitStore: parseRateLimitStore(process.env.RATE_LIMIT_STORE),
     redisUrl: parseOptionalStringEnv('REDIS_URL'),
     rateLimitFailClosed: parseBooleanEnv('RATE_LIMIT_FAIL_CLOSED', nodeEnv === 'production'),
+    userMaxKeyRecords: parseBoundedNumberEnv('USER_MAX_KEY_RECORDS', DEFAULT_MAX_KEYS_PER_USER, 1, MAX_KEYS_PER_USER),
     sentryDsn: parseOptionalStringEnv('SENTRY_DSN'),
     sentryEnabled: parseBooleanEnv('SENTRY_ENABLED', true),
     sentryEnvironment: parseOptionalStringEnv('SENTRY_ENVIRONMENT') || parseOptionalStringEnv('APP_ENV') || nodeEnv,

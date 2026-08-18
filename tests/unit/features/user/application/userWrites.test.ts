@@ -60,6 +60,7 @@ describe('userWrites', () => {
             expect(result).toEqual({ success: true });
             expect(fakeFs.store.users['user-1'].exists).toBe(true);
             expect(fakeFs.store.users['user-1'].data.dekPassword).toEqual(validDekPassword);
+            expect(fakeFs.store.users['user-1'].data.recoveryVerifierHash).toMatch(/^v1:[0-9a-f]{64}$/i);
             expect(getUserKeyRepo().initializeUserEncryptedKeyRecords).toHaveBeenCalledWith('user-1', []);
             expect(getNotificationService().sendDataOnlyNotificationSafe).toHaveBeenCalledWith(
                 'user-1', 'user', 'user update',

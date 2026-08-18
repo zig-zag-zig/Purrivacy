@@ -192,9 +192,9 @@ After Docker is healthy, the VPS tunnel can keep pointing at `http://127.0.0.1:3
 | Variable | Required | Description |
 | --- | --- | --- |
 | `PORT` | No | Server port. Defaults to `5000`. |
-| `NODE_ENV` | No | Runtime environment. Defaults to `development`. |
+| `NODE_ENV` | No | Runtime environment. Defaults to `development`. Production enables strict startup validation (see below). |
 | `LOG_LEVEL` | No | Logger level. Defaults to `info`. |
-| `TRUST_PROXY` | No | Express `trust proxy` configuration: `true`/`false`, `loopback`, a hop count (`1`, `2`), or comma-separated trusted subnets (`10.0.0.0/8, 127.0.0.1`). Defaults to `false`. Prefer `loopback` for the documented single-tunnel deployment. |
+| `TRUST_PROXY` | Yes* | Express `trust proxy` configuration: `true`/`false`, `loopback`, a hop count (`1`, `2`), or comma-separated trusted subnets (`10.0.0.0/8, 127.0.0.1`). Defaults to `false`; **required to be explicitly set in production**. Prefer `loopback` for the documented single-tunnel deployment. |
 | `RATE_LIMIT_STORE` | No | Rate limit store: `memory` (default, process-local) or `redis` (shared across replicas). Use `redis` before running multiple instances. |
 | `REDIS_URL` | No | Redis connection URL, required when `RATE_LIMIT_STORE=redis`. |
 | `RATE_LIMIT_FAIL_CLOSED` | No | When a configured shared store is unavailable: `true` rejects requests on security-critical limiters (503), `false` falls back to a local memory store. Defaults to `true` in production. |
@@ -202,12 +202,18 @@ After Docker is healthy, the VPS tunnel can keep pointing at `http://127.0.0.1:3
 | `AUTH_EMAIL_DOMAIN` | Yes | Email domain used by the app authentication flow. |
 | `GOOGLE_APPLICATION_CREDENTIALS` | Yes* | Absolute path to a Firebase service account JSON file. |
 | `FIREBASE_SERVICE_ACCOUNT_JSON` | Yes* | Inline Firebase service account JSON. Useful for hosted environments. |
-| `FIREBASE_DATABASE_URL` | No | Firebase Realtime Database URL, if used by your project. |
-| `MFA_KEK` | Yes | Hex key used to protect MFA secrets. Generate with `openssl rand -hex 32`. |
-| `REQUEST_JSON_LIMIT` | No | JSON body size limit. Defaults to `10mb`. |
-| `REQUEST_FORM_LIMIT` | No | URL-encoded form body size limit. Defaults to `1mb`. |
+| `FIREBASE_DATABASE_URL` | Yes* | Firebase Realtime Database URL. **Required in production.** |
+| `MFA_KEK` | Yes | Hex key used to protect MFA secrets. Exactly 64 hex characters (`openssl rand -hex 32`); **strictly enforced in production**. |
+| `RECOVERY_ENUMERATION_PEPPER` | Yes* | Secret used to key fake recovery salts so account existence is not distinguishable. 64 hex characters, distinct from `MFA_KEK` and `RECOVERY_VERIFIER_PEPPER`. **Required in production**; derived per-environment development values are used elsewhere. |
+| `RECOVERY_VERIFIER_PEPPER` | Yes* | Secret used to pepper stored recovery verifier hashes (versioned `v1:` format). 64 hex characters, distinct from `MFA_KEK` and `RECOVERY_ENUMERATION_PEPPER`. **Required in production**; derived per-environment development values are used elsewhere. |
+| `REQUEST_JSON_LIMIT` | No | JSON body size limit (byte-size string, e.g. `10mb`). Defaults to `10mb`; capped at `15mb` in production. |
+| `REQUEST_FORM_LIMIT` | No | URL-encoded form body size limit. Defaults to `1mb`; capped at `2mb` in production. |
 
 `GOOGLE_APPLICATION_CREDENTIALS` or `FIREBASE_SERVICE_ACCOUNT_JSON` must be set. Do not commit Firebase credentials or production secrets.
+
+### Production startup validation
+
+When `NODE_ENV=production`, the server refuses to start unless: `MFA_KEK` and both recovery peppers are exactly 64 hex characters and mutually distinct; `FIREBASE_USE_EMULATOR` is disabled; at least one Firebase service-account source is present and valid; `FIREBASE_DATABASE_URL` is set; `TRUST_PROXY` is explicitly configured; body size limits parse and stay within the caps above; and `SENTRY_DSN` is set whenever `SENTRY_ENABLED=true`.
 
 ## Scripts
 
@@ -287,6 +293,10 @@ All current routes are available under `/v1`.
 
 Authenticated endpoints expect a Bearer token in the `Authorization` header. Device-aware session and push-token flows may also require `X-Device-ID`.
 
+## Account Recovery
+
+Recovery uses a client-derived PBKDF2 verifier from a **BIP-39 mnemonic**: only app-generated 24-word BIP-39 phrases are supported for account recovery. The server stores only `sha256(verifier)` — never the mnemonic or verifier itself — and the stored value is additionally peppered server-side with `RECOVERY_VERIFIER_PEPPER` and versioned (`v1:<hmac>`); legacy unpeppered hashes continue to verify during migration. Challenge responses for non-existent accounts use a fake salt keyed by `RECOVERY_ENUMERATION_PEPPER`, so account existence is not observable through the challenge endpoint.
+
 ## Testing
 
 Run the unit test suite:
@@ -356,6 +366,7 @@ Purrivacy Firebase emulator tests use `127.0.0.1:9099`, `127.0.0.1:8080`, and `1
 - Run `npm run build` before deploying locally if needed; it runs tests and then compiles TypeScript.
 - Docker images compile with `npm run build:unchecked` after GitHub Actions has already run `npm run build`.
 - Set `NODE_ENV=production`.
+- Production startup enforces strict configuration validation: 64-hex `MFA_KEK` and recovery peppers (mutually distinct), emulators disabled, Firebase credentials + database URL present, `TRUST_PROXY` explicitly set, body limits within caps, and `SENTRY_DSN` when Sentry is enabled.
 - Set `TRUST_PROXY=loopback` when the app runs behind a single local tunnel/proxy, or list the exact trusted subnets. Avoid the broad `true` value.
 - Rate limits are process-local by default. Before running multiple replicas, set `RATE_LIMIT_STORE=redis` with a shared `REDIS_URL`; security-critical limiters then reject requests (503) when Redis is unavailable (`RATE_LIMIT_FAIL_CLOSED=true`, the production default).
 - Prefer environment-managed secrets over files in hosted environments.

@@ -1,10 +1,12 @@
 import { auth, db } from '../../../infrastructure/firebase';
+import { env } from '../../../config/env';
 import { UsernameIdentity } from '../identity/UsernameIdentity';
 import { EncryptedUserDataValidator } from '../../user/domain/EncryptedUserDataValidator';
 import { UserRecoveryEncryptedData } from '../../../core/types';
 import { BadRequestError } from '../../../utils/errors';
 import { CryptoUtils } from '../../../utils/cryptoUtils';
 import { apiMessages } from '../../../api/http/apiMessages';
+import { verifyRecoveryVerifierHash } from './recoveryVerifierHash';
 
 const FAKE_SALT_BYTES = 16;
 const RECOVERY_VERIFIER_RE = /^[0-9a-f]{64}$/i;
@@ -20,8 +22,13 @@ export class RecoveryAccessService {
         }
     }
 
+    /**
+     * Fake salt for non-existent users (API-SEC-004). Keyed by
+     * RECOVERY_ENUMERATION_PEPPER so the value is stable per username but not
+     * publicly derivable, keeping existing/non-existing users indistinguishable.
+     */
     private static fakeSalt(username: string): string {
-        return CryptoUtils.sha256(`recovery:${username}`).slice(0, FAKE_SALT_BYTES * 2);
+        return CryptoUtils.hmacSha256(env.recoveryEnumerationPepper, username).slice(0, FAKE_SALT_BYTES * 2);
     }
 
     static async getChallenge(usernameInput: unknown): Promise<{ recoveryVerifierSalt: string }> {
@@ -63,7 +70,7 @@ export class RecoveryAccessService {
 
         const expectedHash = doc.get('recoveryVerifierHash');
         const incomingHash = CryptoUtils.sha256(recoveryVerifierInput.toLowerCase());
-        if (typeof expectedHash !== 'string' || !CryptoUtils.timingSafeEqual(expectedHash, incomingHash)) {
+        if (!verifyRecoveryVerifierHash(expectedHash, incomingHash)) {
             throw new BadRequestError(apiMessages.auth.invalidRecoveryCredentials);
         }
 

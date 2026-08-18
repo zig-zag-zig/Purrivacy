@@ -61,6 +61,10 @@ describe('RedisRateLimitStore', () => {
         expect(windowMs).toBe(60_000);
         expect(script).toContain('INCR');
         expect(script).toContain('PEXPIRE');
+        // Self-healing: an existing key without an expiry must be re-anchored
+        // so no key in the namespace can outlive one window.
+        expect(script).toContain('ttl == -1');
+        expect(script.match(/PEXPIRE/g)).toHaveLength(2);
 
         expect(result.count).toBe(3);
         expect(result.resetTime).toBeGreaterThanOrEqual(before + 42_000);

@@ -13,9 +13,11 @@ const logger = createLogger('api.rateLimit.redis');
 const KEY_PREFIX = 'purrivacy:rl:';
 
 /**
- * Atomic fixed-window increment: INCR the counter and set an expiry only when
- * the key is new, so the window is anchored to the first request. Returns the
- * resulting count and the remaining TTL so the caller can compute resetTime.
+ * Atomic fixed-window increment: INCR the counter and set an expiry when the
+ * key is new, anchoring the window to the first request. Self-healing: if the
+ * key somehow exists without an expiry (e.g. an orphan left by an older
+ * deployment or manual intervention), the expiry is (re)applied — a key in
+ * this namespace can never outlive one window.
  */
 const INCREMENT_SCRIPT = `
 local current = redis.call('INCR', KEYS[1])
@@ -23,6 +25,10 @@ if current == 1 then
   redis.call('PEXPIRE', KEYS[1], ARGV[1])
 end
 local ttl = redis.call('PTTL', KEYS[1])
+if ttl == -1 then
+  redis.call('PEXPIRE', KEYS[1], ARGV[1])
+  ttl = tonumber(ARGV[1])
+end
 return {current, ttl}
 `;
 

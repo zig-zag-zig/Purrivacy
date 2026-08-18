@@ -37,6 +37,15 @@ export const parseCreateSessionRequest = (body: unknown): CreateSessionBody => {
     };
 };
 
+/**
+ * Parse the optional MFA code for the MFA-setup-nonce mint endpoint. The code
+ * is only consumed when the session family is stale and the account already
+ * has MFA enabled (API-SEC-006).
+ */
+export const parseMfaSetupNonceMintRequest = (body: unknown): { mfaCode?: string } => ({
+    mfaCode: parseOptionalMfaCode(body),
+});
+
 export const parseRefreshSessionRequest = (body: unknown): string => {
     const refreshTokenValue = getBodyValue(body, 'refreshToken');
     if (typeof refreshTokenValue !== 'string' || !refreshTokenValue.trim()) {

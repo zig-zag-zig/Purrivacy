@@ -11,14 +11,21 @@ import {
 } from '../../../api/http/requestContextHelpers';
 import {
     parseMfaEnableRequest,
+    parseMfaSetupNonceRequest,
     parseSessionTrustRequest,
 } from './mfaRequests';
 
 const router = Router();
 
-// Setup MFA - generates secret and recovery codes
+// Setup MFA - generates secret and recovery codes. Requires a fresh-auth nonce
+// minted at POST /auth/session/mfa-setup-nonce (API-SEC-006).
 router.post('/setup', authenticate('session'), rateLimiter.sensitiveOperations, asyncHandler(async (req, res) => {
-    const { secret, otpauthUrl, recoveryCodes } = await MfaService.setupMfa(requireAuthenticatedUserId(req));
+    const nonce = parseMfaSetupNonceRequest(req.body);
+    const { secret, otpauthUrl, recoveryCodes } = await MfaService.setupMfa(
+        requireAuthenticatedUserId(req),
+        requireSessionFamilyId(req),
+        nonce,
+    );
 
     ResponseUtils.success(res, {
         secret,

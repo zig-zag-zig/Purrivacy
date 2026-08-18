@@ -71,4 +71,26 @@ describe('cleanupExpiredMfaSetups', () => {
         expect(batchSpy).toHaveBeenCalledTimes(2);
         expect(fakeFs.store.mfaSetup['user-active'].exists).toBe(true);
     });
+
+    it('also purges expired MFA setup nonces', async () => {
+        const now = new Date();
+        const past = new Date(now.getTime() - 3600_000);
+        const future = new Date(now.getTime() + 3600_000);
+
+        fakeFs.store.mfaSetup = {
+            'user-1': { exists: true, data: { expiresAt: ts(past) } },
+        };
+        fakeFs.store.mfaSetupNonces = {
+            'nonce-expired': { exists: true, data: { expiresAt: ts(past) } },
+            'nonce-active': { exists: true, data: { expiresAt: ts(future) } },
+        };
+
+        const { cleanupExpiredMfaSetups } = loadModule();
+        const count = await cleanupExpiredMfaSetups();
+
+        expect(count).toBe(2);
+        expect(fakeFs.store.mfaSetup['user-1'].exists).toBe(false);
+        expect(fakeFs.store.mfaSetupNonces['nonce-expired'].exists).toBe(false);
+        expect(fakeFs.store.mfaSetupNonces['nonce-active'].exists).toBe(true);
+    });
 });

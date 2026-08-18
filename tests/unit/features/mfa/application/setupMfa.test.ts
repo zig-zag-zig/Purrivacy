@@ -13,6 +13,10 @@ jest.mock('../../../../../src/features/user/application/UserService', () => ({
     UserService: { getUserMfaState: jest.fn() },
 }));
 
+jest.mock('../../../../../src/features/mfa/application/mfaSetupNonce', () => ({
+    consumeMfaSetupNonce: jest.fn(),
+}));
+
 jest.mock('../../../../../src/config/env', () => ({
     env: { mfaKek: 'test-mfa-kek-with-enough-entropy-for-local-test' },
 }));
@@ -42,17 +46,39 @@ const loadModule = (): typeof import('../../../../../src/features/mfa/applicatio
 
 const getAuth = () => require('../../../../../src/infrastructure/firebase/index.js').auth;
 const getUserService = () => require('../../../../../src/features/user/application/UserService').UserService;
+const getConsumeNonce = () => require('../../../../../src/features/mfa/application/mfaSetupNonce').consumeMfaSetupNonce;
 
 describe('setupMfa', () => {
     beforeEach(() => {
         fakeFs.reset();
         jest.clearAllMocks();
+        getConsumeNonce().mockResolvedValue(undefined);
     });
 
     it('throws MfaAlreadyEnabledError when MFA is already enabled', async () => {
         getUserService().getUserMfaState.mockResolvedValue({ mfaEnabled: true });
         const { setupMfa } = loadModule();
-        await expect(setupMfa('user-1')).rejects.toThrow(/already enabled/);
+        await expect(setupMfa('user-1', 'family-1', 'valid-nonce')).rejects.toThrow(/already enabled/);
+        expect(getConsumeNonce()).not.toHaveBeenCalled();
+    });
+
+    it('consumes the fresh-auth nonce before issuing the setup secret', async () => {
+        getUserService().getUserMfaState.mockResolvedValue({ mfaEnabled: false });
+        getAuth().getUser.mockResolvedValue({ uid: 'user-1', email: 'alice@purrivacy.test' });
+        const { setupMfa } = loadModule();
+
+        await setupMfa('user-1', 'family-1', 'valid-nonce');
+
+        expect(getConsumeNonce()).toHaveBeenCalledWith('user-1', 'family-1', 'valid-nonce');
+    });
+
+    it('aborts setup when the nonce cannot be consumed', async () => {
+        getUserService().getUserMfaState.mockResolvedValue({ mfaEnabled: false });
+        getConsumeNonce().mockRejectedValue(new Error('invalid nonce'));
+        const { setupMfa } = loadModule();
+
+        await expect(setupMfa('user-1', 'family-1', 'bad-nonce')).rejects.toThrow('invalid nonce');
+        expect(fakeFs.store.mfaSetup).toBeUndefined();
     });
 
     it('generates TOTP secret and recovery codes, stores encrypted setup document', async () => {
@@ -60,7 +86,7 @@ describe('setupMfa', () => {
         getAuth().getUser.mockResolvedValue({ uid: 'user-1', email: 'alice@purrivacy.test' });
         const { setupMfa } = loadModule();
 
-        const result = await setupMfa('user-1');
+        const result = await setupMfa('user-1', 'family-1', 'valid-nonce');
 
         expect(result.secret).toEqual(expect.any(String));
         expect(result.otpauthUrl).toEqual(expect.stringContaining('otpauth://totp/'));
@@ -78,7 +104,7 @@ describe('setupMfa', () => {
         getAuth().getUser.mockResolvedValue({ uid: 'user-1' });
         const { setupMfa } = loadModule();
 
-        const result = await setupMfa('user-1');
+        const result = await setupMfa('user-1', 'family-1', 'valid-nonce');
 
         expect(result.otpauthUrl).toContain('user-1');
     });

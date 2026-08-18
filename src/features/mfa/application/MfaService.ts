@@ -4,6 +4,7 @@ import {
     getRemainingMfaRecoveryCodes,
     regenerateMfaRecoveryCodes,
 } from './mfaRecoveryCodes';
+import { mintMfaSetupNonce } from './mfaSetupNonce';
 import { setupMfa } from './setupMfa';
 import { verifyMfaCode } from './verifyMfaCode';
 
@@ -13,8 +14,18 @@ import { verifyMfaCode } from './verifyMfaCode';
 export class MfaService {
     static async setupMfa(
         userId: string,
+        sessionFamilyId: string,
+        nonce: unknown,
     ): Promise<{ secret: string; otpauthUrl: string; recoveryCodes: string[] }> {
-        return setupMfa(userId);
+        return setupMfa(userId, sessionFamilyId, nonce);
+    }
+
+    static async mintMfaSetupNonce(
+        userId: string,
+        sessionFamilyId: string,
+        mfaCode?: string,
+    ): Promise<{ nonce: string; expiresAt: string }> {
+        return mintMfaSetupNonce(userId, sessionFamilyId, mfaCode);
     }
 
     static async verifyAndEnableMfa(

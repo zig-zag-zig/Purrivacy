@@ -28,6 +28,33 @@ export function errorMiddleware(err: unknown, req: Request, res: Response, next:
     errorLike.details = details;
     res.locals.errorDetails = details;
 
+    // Expected client-input failures (malformed JSON / oversized body) are
+    // routine 4xx errors: log concise metadata at warn level without a stack
+    // trace instead of classifying them as unhandled server errors
+    // (API-ARCH-002).
+    if (err instanceof SyntaxError && 'body' in err) {
+        logger.warn('invalid JSON request body', {
+            requestId,
+            path: req.path,
+            method: req.method,
+            statusCode: 400,
+        });
+        ResponseUtils.error(res, apiMessages.body.invalidJson, 400, responseDetails);
+        return;
+    }
+
+    if (errorLike.type === 'entity.too.large') {
+        const statusCode = errorLike.status || 413;
+        logger.warn('request body too large', {
+            requestId,
+            path: req.path,
+            method: req.method,
+            statusCode,
+        });
+        ResponseUtils.error(res, apiMessages.body.tooLarge, statusCode, responseDetails);
+        return;
+    }
+
     const logMeta = {
         requestId,
         message: error.message,
@@ -44,16 +71,6 @@ export function errorMiddleware(err: unknown, req: Request, res: Response, next:
         logger.warn('request error', logMeta);
     } else {
         logger.error('unhandled request error', logMeta);
-    }
-
-    if (err instanceof SyntaxError && 'body' in err) {
-        ResponseUtils.error(res, apiMessages.body.invalidJson, 400, responseDetails);
-        return;
-    }
-
-    if (errorLike.type === 'entity.too.large') {
-        ResponseUtils.error(res, apiMessages.body.tooLarge, errorLike.status || 413, responseDetails);
-        return;
     }
 
     // Handle AppError and its subclasses

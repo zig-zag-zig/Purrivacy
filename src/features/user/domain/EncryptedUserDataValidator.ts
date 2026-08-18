@@ -87,12 +87,12 @@ export class EncryptedUserDataValidator {
         return EncryptedUserDataValidator.sanitizeEncryptedPayload(value, name, MAX_ENCRYPTED_KEY_DATA_LENGTH);
     }
 
-    static sanitizeEncryptedKeys(value: unknown): EncryptedPayload[] {
+    static sanitizeEncryptedKeys(value: unknown, maxKeys = MAX_KEYS_PER_USER): EncryptedPayload[] {
         if (!Array.isArray(value)) {
             throw new BadRequestError('keys must be an array');
         }
 
-        if (value.length > MAX_KEYS_PER_USER) {
+        if (value.length > maxKeys) {
             throw new BadRequestError('Too many keys');
         }
 
@@ -111,11 +111,11 @@ export class EncryptedUserDataValidator {
         return sanitizedKeys;
     }
 
-    static sanitizeUserEncryptedData(value: unknown): UserEncryptedData {
+    static sanitizeUserEncryptedData(value: unknown, maxKeys = MAX_KEYS_PER_USER): UserEncryptedData {
         const record = assertRecord(value, 'userData');
         const dekPassword = EncryptedUserDataValidator.sanitizeSaltedEncryptedPayload(record.dekPassword, 'dekPassword');
         const dekSeed = EncryptedUserDataValidator.sanitizeSaltedEncryptedPayload(record.dekSeed, 'dekSeed');
-        const keys = EncryptedUserDataValidator.sanitizeEncryptedKeys(record.keys);
+        const keys = EncryptedUserDataValidator.sanitizeEncryptedKeys(record.keys, maxKeys);
 
         if (
             encryptedLength(dekPassword)
@@ -129,10 +129,10 @@ export class EncryptedUserDataValidator {
         return { dekPassword, dekSeed, keys };
     }
 
-    static sanitizeUserForCreate(value: unknown): User {
+    static sanitizeUserForCreate(value: unknown, maxKeys = MAX_KEYS_PER_USER): User {
         const record = assertRecord(value, 'userData');
         return {
-            ...EncryptedUserDataValidator.sanitizeUserEncryptedData(record),
+            ...EncryptedUserDataValidator.sanitizeUserEncryptedData(record, maxKeys),
             recoveryVerifierSalt: assertHex(record.recoveryVerifierSalt, 'recoveryVerifierSalt', RECOVERY_VERIFIER_SALT_BYTES),
             recoveryVerifierHash: assertHex(record.recoveryVerifierHash, 'recoveryVerifierHash', RECOVERY_VERIFIER_HASH_BYTES),
             mfaEnabled: false,

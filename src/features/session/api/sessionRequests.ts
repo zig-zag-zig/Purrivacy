@@ -5,7 +5,7 @@ import {
     parseOptionalTrimmedString,
 } from '../../../api/http/requestParsing';
 
-export type CreateSessionBody = {
+type CreateSessionBody = {
     mfaCode?: string;
     mfaTrusted?: boolean;
     label?: string;
@@ -36,6 +36,15 @@ export const parseCreateSessionRequest = (body: unknown): CreateSessionBody => {
         platform: parseOptionalTrimmedString(body, 'platform', MAX_SESSION_PLATFORM_LENGTH),
     };
 };
+
+/**
+ * Parse the optional MFA code for the MFA-setup-nonce mint endpoint. The code
+ * is only consumed when the session family is stale and the account already
+ * has MFA enabled (API-SEC-006).
+ */
+export const parseMfaSetupNonceMintRequest = (body: unknown): { mfaCode?: string } => ({
+    mfaCode: parseOptionalMfaCode(body),
+});
 
 export const parseRefreshSessionRequest = (body: unknown): string => {
     const refreshTokenValue = getBodyValue(body, 'refreshToken');

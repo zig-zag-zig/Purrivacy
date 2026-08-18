@@ -6,5 +6,19 @@
     "entry": [
         "src/app.ts"
     ],
-    "ignoreExportsUsedInFile": false
+    "ignoreExportsUsedInFile": false,
+    "ignoreIssues": {
+        "src/api/rate-limit/rateLimitStoreFactory.ts": [
+            "exports"
+        ],
+        "src/features/mfa/application/mfaSetupNonce.ts": [
+            "exports"
+        ],
+        "src/features/mfa/application/mfaTransitionStore.ts": [
+            "exports"
+        ],
+        "src/infrastructure/firebase/chunkedWrites.ts": [
+            "exports"
+        ]
+    }
 }

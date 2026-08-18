@@ -90,21 +90,38 @@ describe('logger redaction', () => {
     it('includes Error name, message but hides stack in production', () => {
         jest.resetModules();
         const originalNodeEnv = process.env.NODE_ENV;
+        // env.ts validates strictly in production; provide a valid production
+        // configuration so the module reload succeeds.
+        process.env.MFA_KEK = 'a'.repeat(64);
+        process.env.RECOVERY_ENUMERATION_PEPPER = 'b'.repeat(64);
+        process.env.RECOVERY_VERIFIER_PEPPER = 'c'.repeat(64);
+        process.env.TRUST_PROXY = 'loopback';
+        process.env.FIREBASE_DATABASE_URL = 'https://demo-purrivacy-default-rtdb.firebaseio.com';
+        process.env.FIREBASE_SERVICE_ACCOUNT_JSON = JSON.stringify({
+            type: 'service_account',
+            project_id: 'demo-purrivacy',
+            private_key: '-----BEGIN PRIVATE KEY-----\nk\n-----END PRIVATE KEY-----\n',
+            client_email: 'demo@demo-purrivacy.iam.gserviceaccount.com',
+        });
+        process.env.SENTRY_ENABLED = 'false';
+        process.env.SENTRY_DSN = 'https://public-key@sentry.example.com/1';
         process.env.NODE_ENV = 'production';
         process.env.LOG_LEVEL = 'debug';
-        const { createLogger } = require('../../../src/utils/logger') as typeof import('../../../src/utils/logger');
-        const logger = createLogger('test');
+        try {
+            const { createLogger } = require('../../../src/utils/logger') as typeof import('../../../src/utils/logger');
+            const logger = createLogger('test');
 
-        logger.error('error test', {
-            err: new Error('something broke'),
-        });
+            logger.error('error test', {
+                err: new Error('something broke'),
+            });
 
-        process.env.NODE_ENV = originalNodeEnv;
-
-        const output = JSON.parse(errorSpy.mock.calls[0][0]);
-        expect(output.err.name).toBe('Error');
-        expect(output.err.message).toBe('something broke');
-        expect(output.err.stack).toBeUndefined();
+            const output = JSON.parse(errorSpy.mock.calls[0][0]);
+            expect(output.err.name).toBe('Error');
+            expect(output.err.message).toBe('something broke');
+            expect(output.err.stack).toBeUndefined();
+        } finally {
+            process.env.NODE_ENV = originalNodeEnv;
+        }
     });
 
     it('includes Error stack in non-production', () => {

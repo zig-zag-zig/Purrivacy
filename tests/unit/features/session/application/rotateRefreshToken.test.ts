@@ -6,10 +6,6 @@ jest.mock('../../../../../src/infrastructure/firebase/index.js', () => ({
     db: fakeFs.db,
 }), { virtual: true });
 
-jest.mock('../../../../../src/features/mfa/application/MfaService', () => ({
-    MfaService: { verifyMfaCode: jest.fn() },
-}));
-
 jest.mock('../../../../../src/features/notification/application/NotificationService', () => ({
     NotificationService: { sendDataOnlyNotification: jest.fn(), sendDataOnlyNotificationSafe: jest.fn() },
 }));

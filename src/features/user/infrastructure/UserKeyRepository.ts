@@ -1,8 +1,13 @@
 import {
     EncryptedPayload,
     EncryptedKeyRecordWithId,
+    KeyRecordListOptions,
 } from '../../../core/types';
-import { NotFoundError } from '../../../utils/errors';
+import {
+    DEFAULT_KEY_RECORDS_PAGE_SIZE,
+} from '../../../core/constants';
+import { env } from '../../../config/env';
+import { KeyQuotaExceededError, NotFoundError } from '../../../utils/errors';
 import { EncryptedUserDataValidator } from '../domain/EncryptedUserDataValidator';
 import {
     assertUserKeyRecordId,
@@ -11,9 +16,10 @@ import {
 } from './userKeys/userKeyRefs';
 import {
     createEmptyUserEncryptedKeyRecordSet,
-    sanitizeUserEncryptedKeyItems,
+    paginateUserEncryptedKeyRecords,
     sanitizeUserEncryptedKeyRecordSet,
     toEncryptedKeyRecords,
+    toUserEncryptedKeyRecordEntries,
     UserEncryptedKeysRecordSet,
 } from './userKeys/userKeyRecordSet';
 
@@ -33,15 +39,6 @@ const readUserEncryptedKeyRecordSetFromDb = async (
     return sanitizeUserEncryptedKeyRecordSet(value);
 };
 
-const refreshUserKeyCount = async (userId: string): Promise<number> => {
-    const ref = getUserKeysRef(userId);
-    const itemsSnapshot = await ref.child(USER_KEY_ITEMS_CHILD).get();
-    const items = sanitizeUserEncryptedKeyItems(itemsSnapshot.val());
-    const count = Object.keys(items).length;
-    await ref.child('count').set(count);
-    return count;
-};
-
 const readUserEncryptedKeyRecords = async (
     userId: string,
 ): Promise<EncryptedKeyRecordWithId[]> => {
@@ -52,11 +49,21 @@ const readUserEncryptedKeyRecords = async (
 
 export const readUserEncryptedKeyRecordSet = async (
     userId: string,
-): Promise<{
-    keys: EncryptedKeyRecordWithId[];
-}> => ({
-    keys: await readUserEncryptedKeyRecords(userId),
-});
+    options: KeyRecordListOptions = {},
+): Promise<{ keys: EncryptedKeyRecordWithId[]; nextCursor?: string }> => {
+    const value = await readUserEncryptedKeyRecordSetFromDb(userId);
+    const limit = options.limit ?? DEFAULT_KEY_RECORDS_PAGE_SIZE;
+
+    const { records, nextCursor } = paginateUserEncryptedKeyRecords(
+        toUserEncryptedKeyRecordEntries(value.items),
+        { limit, cursor: options.cursor, since: options.since },
+    );
+
+    return {
+        keys: records.map(({ recordId, key }) => ({ recordId, key })),
+        nextCursor,
+    };
+};
 
 export const readUserEncryptedKeys = async (
     userId: string,
@@ -70,9 +77,10 @@ export const initializeUserEncryptedKeyRecords = async (
     keys: EncryptedPayload[] = [],
 ): Promise<EncryptedKeyRecordWithId[]> => {
     const ref = getUserKeysRef(userId);
-    const sanitizedKeys = EncryptedUserDataValidator.sanitizeEncryptedKeys(keys);
+    const sanitizedKeys = EncryptedUserDataValidator.sanitizeEncryptedKeys(keys, env.userMaxKeyRecords);
     const itemsRef = ref.child(USER_KEY_ITEMS_CHILD);
-    const items: Record<string, EncryptedPayload> = {};
+    const items: UserEncryptedKeysRecordSet['items'] = {};
+    const updatedAt = Date.now();
 
     for (const key of sanitizedKeys) {
         const recordId = itemsRef.push().key;
@@ -80,24 +88,30 @@ export const initializeUserEncryptedKeyRecords = async (
             throw new Error('Failed to generate key record id');
         }
         assertUserKeyRecordId(recordId);
-        items[recordId] = key;
+        items[recordId] = { ...key, updatedAt };
     }
 
     await ref.set({
         count: sanitizedKeys.length,
         items,
-        updatedAt: Date.now(),
+        updatedAt,
     } satisfies UserEncryptedKeysRecordSet);
 
-    return Object.entries(items).map(([recordId, key]) => ({ recordId, key }));
+    return Object.entries(items).map(([recordId, item]) => ({
+        recordId,
+        key: { encryptedData: item.encryptedData, iv: item.iv, tag: item.tag },
+    }));
 };
 
+/**
+ * Adds a key record atomically: the item write and the count/quota guard live
+ * inside one RTDB transaction, so concurrent adds can never exceed the
+ * configured per-user quota and `count` cannot drift from the items.
+ */
 export const addUserEncryptedKeyRecord = async (
     userId: string,
     key: EncryptedPayload,
 ): Promise<EncryptedKeyRecordWithId> => {
-    await readUserEncryptedKeyRecordSetFromDb(userId);
-
     const sanitized = EncryptedUserDataValidator.sanitizeEncryptedKeyRecord(key, 'key');
     const ref = getUserKeysRef(userId);
     const recordRef = ref.child(USER_KEY_ITEMS_CHILD).push();
@@ -105,13 +119,36 @@ export const addUserEncryptedKeyRecord = async (
     if (!recordId) {
         throw new Error('Failed to generate key record id');
     }
-
     assertUserKeyRecordId(recordId);
-    await ref.update({
-        updatedAt: Date.now(),
-        [`${USER_KEY_ITEMS_CHILD}/${recordId}`]: sanitized,
+
+    const maxKeys = env.userMaxKeyRecords;
+    const updatedAt = Date.now();
+
+    const result = await ref.transaction((current: unknown) => {
+        if (current === null || current === undefined) {
+            return {
+                count: 1,
+                items: { [recordId]: { ...sanitized, updatedAt } },
+                updatedAt,
+            } satisfies UserEncryptedKeysRecordSet;
+        }
+
+        const recordSet = sanitizeUserEncryptedKeyRecordSet(current);
+        if (Object.keys(recordSet.items).length >= maxKeys) {
+            // Abort the transaction: quota exceeded (committed === false).
+            return undefined;
+        }
+
+        return {
+            count: Object.keys(recordSet.items).length + 1,
+            items: { ...recordSet.items, [recordId]: { ...sanitized, updatedAt } },
+            updatedAt,
+        } satisfies UserEncryptedKeysRecordSet;
     });
-    await refreshUserKeyCount(userId);
+
+    if (!result.committed) {
+        throw new KeyQuotaExceededError({ maxKeys });
+    }
 
     return { recordId, key: sanitized };
 };
@@ -122,19 +159,50 @@ export const updateUserEncryptedKeyRecord = async (
     key: EncryptedPayload,
 ): Promise<EncryptedKeyRecordWithId> => {
     assertUserKeyRecordId(recordId);
-    await readUserEncryptedKeyRecordSetFromDb(userId);
 
     const sanitized = EncryptedUserDataValidator.sanitizeEncryptedKeyRecord(key, 'key');
     const ref = getUserKeysRef(userId);
-    const existingSnapshot = await ref.child(`${USER_KEY_ITEMS_CHILD}/${recordId}`).get();
-    if (!existingSnapshot.exists()) {
+
+    // Authoritative existence pre-check: a genuinely missing record set must
+    // 404 without creating anything. Inside the transaction the SDK can hand
+    // the callback a stale `null` on its first invocation, so the callback
+    // treats null as "retry" (placeholder value) instead of "missing".
+    const preSnapshot = await ref.get();
+    if (!preSnapshot.exists()) {
         throw new NotFoundError('Key record not found');
     }
 
-    await ref.update({
-        updatedAt: Date.now(),
-        [`${USER_KEY_ITEMS_CHILD}/${recordId}`]: sanitized,
+    const updatedAt = Date.now();
+
+    const result = await ref.transaction((current: unknown) => {
+        if (current === null || current === undefined) {
+            return createEmptyUserEncryptedKeyRecordSet();
+        }
+
+        const recordSet = sanitizeUserEncryptedKeyRecordSet(current);
+        if (!recordSet.items[recordId]) {
+            return undefined;
+        }
+
+        return {
+            count: Object.keys(recordSet.items).length,
+            items: { ...recordSet.items, [recordId]: { ...sanitized, updatedAt } },
+            updatedAt,
+        } satisfies UserEncryptedKeysRecordSet;
     });
+
+    if (!result.committed) {
+        throw new NotFoundError('Key record not found');
+    }
+
+    // Guard (oracle review NEW-4): if the whole record set was deleted
+    // concurrently, the transaction's null-branch may have committed an empty
+    // set. Verify the record actually exists so we never report success for a
+    // write that did not land.
+    const stored = await ref.child(`${USER_KEY_ITEMS_CHILD}/${recordId}`).get();
+    if (!stored.exists()) {
+        throw new NotFoundError('Key record not found');
+    }
 
     return { recordId, key: sanitized };
 };
@@ -144,16 +212,39 @@ export const deleteUserEncryptedKeyRecord = async (
     recordId: string,
 ): Promise<void> => {
     assertUserKeyRecordId(recordId);
-    const value = await readUserEncryptedKeyRecordSetFromDb(userId);
-    if (!value.items[recordId]) {
+    const ref = getUserKeysRef(userId);
+
+    // See updateUserEncryptedKeyRecord: pre-check existence so a genuinely
+    // missing record set 404s without creating an empty stub via the
+    // transaction retry placeholder.
+    const preSnapshot = await ref.get();
+    if (!preSnapshot.exists()) {
         throw new NotFoundError('Key record not found');
     }
 
-    await getUserKeysRef(userId).update({
-        updatedAt: Date.now(),
-        [`${USER_KEY_ITEMS_CHILD}/${recordId}`]: null,
+    const result = await ref.transaction((current: unknown) => {
+        if (current === null || current === undefined) {
+            return createEmptyUserEncryptedKeyRecordSet();
+        }
+
+        const recordSet = sanitizeUserEncryptedKeyRecordSet(current);
+        if (!recordSet.items[recordId]) {
+            return undefined;
+        }
+
+        const remainingItems = { ...recordSet.items };
+        delete remainingItems[recordId];
+
+        return {
+            count: Object.keys(remainingItems).length,
+            items: remainingItems,
+            updatedAt: Date.now(),
+        } satisfies UserEncryptedKeysRecordSet;
     });
-    await refreshUserKeyCount(userId);
+
+    if (!result.committed) {
+        throw new NotFoundError('Key record not found');
+    }
 };
 
 export const deleteUserEncryptedKeys = async (userId: string): Promise<void> => {

@@ -1,4 +1,4 @@
-export type MfaCodeKind = 'recovery' | 'totp' | 'invalid';
+type MfaCodeKind = 'recovery' | 'totp' | 'invalid';
 
 const RECOVERY_CODE_RE = /^[A-Z0-9]{12}$/;
 const TOTP_CODE_RE = /^\d{6}$/;

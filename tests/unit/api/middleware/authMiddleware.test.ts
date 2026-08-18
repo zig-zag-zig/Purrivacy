@@ -7,8 +7,8 @@ jest.mock('../../../../src/infrastructure/firebase/index.js', () => ({
     db: fakeFs.db,
 }), { virtual: true });
 
-jest.mock('../../../../src/features/mfa/application/MfaService', () => ({
-    MfaService: { verifyMfaCode: jest.fn() },
+jest.mock('../../../../src/features/mfa/application/verifyMfaCode', () => ({
+    verifyMfaCode: jest.fn(),
 }));
 
 jest.mock('../../../../src/features/notification/application/NotificationService', () => ({
@@ -88,13 +88,13 @@ describe('authMiddleware', () => {
         jest.mock('../../../../src/features/session/application/AuthSessionService', () => ({
             AuthSessionService: { extractUserIdFromToken: jest.fn() },
         }));
-        jest.mock('../../../../src/features/session/application/SessionService', () => ({
-            SessionService: {
-                validateSession: jest.fn().mockRejectedValue(
-                    new (require('../../../../src/utils/errors').AuthError)('Invalid token', { sessionInvalid: true }, 401)
-                ),
-                deleteSession: jest.fn(),
-            },
+        jest.mock('../../../../src/features/session/application/validateSession', () => ({
+            validateBackendSession: jest.fn().mockRejectedValue(
+                new (require('../../../../src/utils/errors').AuthError)('Invalid token', { sessionInvalid: true }, 401)
+            ),
+        }));
+        jest.mock('../../../../src/features/session/application/sessionDeletion', () => ({
+            deleteAccessSession: jest.fn(),
         }));
         jest.mock('../../../../src/features/user/application/UserService', () => ({
             UserService: { getUserMfaState: jest.fn() },
@@ -121,11 +121,11 @@ describe('authMiddleware', () => {
         jest.mock('../../../../src/features/session/application/AuthSessionService', () => ({
             AuthSessionService: { extractUserIdFromToken: jest.fn() },
         }));
-        jest.mock('../../../../src/features/session/application/SessionService', () => ({
-            SessionService: {
-                validateSession: jest.fn().mockResolvedValue({ userId: 'user-1', refreshTokenFamilyId: 'fam-1' }),
-                deleteSession: mockDeleteSession,
-            },
+        jest.mock('../../../../src/features/session/application/validateSession', () => ({
+            validateBackendSession: jest.fn().mockResolvedValue({ userId: 'user-1', refreshTokenFamilyId: 'fam-1' }),
+        }));
+        jest.mock('../../../../src/features/session/application/sessionDeletion', () => ({
+            deleteAccessSession: mockDeleteSession,
         }));
         jest.mock('../../../../src/features/user/application/UserService', () => ({
             UserService: {

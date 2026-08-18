@@ -1,11 +1,15 @@
 import { db } from '../../../infrastructure/firebase';
-import { ConflictError } from '../../../utils/errors';
+import { env } from '../../../config/env';
+import { ConflictError, TransitionError } from '../../../utils/errors';
 import { createLogger } from '../../../utils/logger';
 import { NotificationService } from '../../notification/application/NotificationService';
 import { EncryptedUserDataValidator } from '../domain/EncryptedUserDataValidator';
 import { deleteUserEncryptedKeys, initializeUserEncryptedKeyRecords } from '../infrastructure/UserKeyRepository';
 import { getUserRef, getUserWithFieldMask } from '../infrastructure/UserRepository';
 import { deleteUserPushTokensFromDb } from '../../notification/infrastructure/pushTokenStore';
+import { pepperRecoveryVerifierHash } from '../../auth/recovery/recoveryVerifierHash';
+import { SessionRevocationService } from '../../session/application/SessionRevocationService';
+import { executeTransition, TransitionStep } from '../../../core/transitions/transitionRunner';
 
 const logger = createLogger('features.user.writes');
 
@@ -31,8 +35,10 @@ export const createUser = async (
         throw new ConflictError('User already exists');
     }
 
-    const sanitizedUser = EncryptedUserDataValidator.sanitizeUserForCreate(user);
+    const sanitizedUser = EncryptedUserDataValidator.sanitizeUserForCreate(user, env.userMaxKeyRecords);
     const { keys, ...userDocument } = sanitizedUser;
+    // Store the recovery verifier hash server-side peppered and versioned (API-SEC-010).
+    userDocument.recoveryVerifierHash = pepperRecoveryVerifierHash(userDocument.recoveryVerifierHash);
     await userRef.create(userDocument);
 
     try {
@@ -62,15 +68,58 @@ export const changeDekPassword = async (
 };
 
 export const deleteUser = async (userId: string): Promise<void> => {
-    const userRef = getUserRef(userId);
-    const batch = db.batch();
-    batch.delete(userRef.collection('security').doc('mfa'));
-    batch.delete(userRef);
-    await batch.commit();
-    await Promise.all([
-        deleteUserEncryptedKeys(userId),
-        deleteUserPushTokensFromDb(userId),
-    ]);
+    // Ordered, idempotent steps (API-SEC-008): sessions are revoked first to
+    // cut access, then user/MFA documents, then the RTDB key records and push
+    // tokens. Every step is independently retryable, so a partially failed
+    // deletion is completed by re-issuing the request. The structured error
+    // identifies the remaining steps for logging and for the caller.
+    const steps: TransitionStep[] = [
+        {
+            name: 'revokeSessions',
+            run: () => SessionRevocationService.revokeAllUserSessions(userId, true),
+        },
+        {
+            name: 'deleteUserDocuments',
+            run: async () => {
+                const userRef = getUserRef(userId);
+                const batch = db.batch();
+                batch.delete(userRef.collection('security').doc('mfa'));
+                batch.delete(userRef);
+                await batch.commit();
+            },
+        },
+        {
+            name: 'deleteEncryptedKeys',
+            run: () => deleteUserEncryptedKeys(userId),
+        },
+        {
+            name: 'deletePushTokens',
+            run: () => deleteUserPushTokensFromDb(userId),
+        },
+    ];
+
+    const execution = await executeTransition(steps);
+
+    if (execution.status === 'failed') {
+        const remainingSteps = steps
+            .map(step => step.name)
+            .filter(name => !execution.completedSteps.includes(name));
+        logger.error('user deletion partially failed; remaining steps must be retried', {
+            userId,
+            failedStep: execution.failedStep,
+            completedSteps: execution.completedSteps,
+            remainingSteps,
+        });
+        throw new TransitionError(
+            'User deletion failed. Retry the request to complete the remaining cleanup steps.',
+            {
+                failedStep: execution.failedStep,
+                completedSteps: execution.completedSteps,
+                remainingSteps,
+                retryable: true,
+            },
+        );
+    }
 };
 
 const PASSPHRASE_STORAGE_FIELD = 'passphraseStorageEnabled';

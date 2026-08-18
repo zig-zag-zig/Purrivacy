@@ -19,7 +19,11 @@ describe('MFA Recovery Flow', () => {
 
     it('returns regenerated recovery codes after recovery-code consumption reaches the threshold', async () => {
         const { firebaseUser, session } = await createApiUserSession(baseUrl);
-        const setupResponse = await requestJson(baseUrl, 'POST', '/mfa/setup', session.accessToken);
+        const nonceResponse = await requestJson(baseUrl, 'POST', '/auth/session/mfa-setup-nonce', session.accessToken);
+        expect(nonceResponse.status).toBe(200);
+        const { nonce } = await nonceResponse.json() as { nonce: string };
+        const setupResponse = await requestJson(baseUrl, 'POST', '/mfa/setup', session.accessToken, { nonce });
+        expect(setupResponse.status).toBe(200);
         const setup = await setupResponse.json() as { secret: string; recoveryCodes: string[] };
         const mfaCode = new TOTP({ secret: Secret.fromBase32(setup.secret) }).generate();
 

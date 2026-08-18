@@ -1,5 +1,4 @@
 import { createFakeFirestore } from '../../../../helpers/fakeFirestore';
-import { ts } from '../../../../helpers/testFixtures';
 
 const fakeFs = createFakeFirestore();
 
@@ -38,28 +37,79 @@ describe('SessionRevocationService', () => {
         expect(fakeFs.store.sessions['s-1'].exists).toBe(false);
         expect(fakeFs.store.sessions['s-2'].exists).toBe(false);
         expect(getAuth().revokeRefreshTokens).not.toHaveBeenCalled();
-        expect(getNotificationService().sendDataOnlyNotification).not.toHaveBeenCalled();
+        expect(getNotificationService().sendDataOnlyNotificationSafe).not.toHaveBeenCalled();
     });
 
     it('revokes Firebase tokens and sends notification when revokeFbToken is true', async () => {
         getAuth().revokeRefreshTokens.mockResolvedValue(undefined);
-        getNotificationService().sendDataOnlyNotification.mockResolvedValue(undefined);
+        getNotificationService().sendDataOnlyNotificationSafe.mockResolvedValue(undefined);
 
         const { SessionRevocationService } = loadService();
         await SessionRevocationService.revokeAllUserSessions('user-1', true);
 
         expect(getAuth().revokeRefreshTokens).toHaveBeenCalledWith('user-1');
-        expect(getNotificationService().sendDataOnlyNotification).toHaveBeenCalledWith('user-1', 'sessionRevoked');
+        expect(getNotificationService().sendDataOnlyNotificationSafe).toHaveBeenCalledWith('user-1', 'sessionRevoked', 'session revoked');
     });
 
-    it('throws when session deletion fails', async () => {
-        // Use a non-existent userId to cause the deleteAllUserSessions to fail during query
-        // Actually deleteAllUserSessions never throws for empty collections, so we mock a different approach
-        const { SessionRevocationService } = loadService();
-        // Session deletion with no data succeeds (no-op), Firebase revoke throws
-        getAuth().revokeRefreshTokens.mockRejectedValue(new Error('Firebase error'));
+    it('keeps the excluded family (and its records) alive', async () => {
+        fakeFs.store.sessions = {
+            's-old': { exists: true, data: { userId: 'user-1', refreshTokenFamilyId: 'fam-old' } },
+            's-new': { exists: true, data: { userId: 'user-1', refreshTokenFamilyId: 'fam-new' } },
+        };
+        fakeFs.store.refreshTokens = {
+            'rt-old': { exists: true, data: { userId: 'user-1', familyId: 'fam-old' } },
+            'rt-new': { exists: true, data: { userId: 'user-1', familyId: 'fam-new' } },
+        };
+        fakeFs.store.refreshTokenFamilies = {
+            'fam-old': { exists: true, data: { userId: 'user-1', familyId: 'fam-old' } },
+            'fam-new': { exists: true, data: { userId: 'user-1', familyId: 'fam-new' } },
+        };
 
+        const { SessionRevocationService } = loadService();
+        await SessionRevocationService.revokeAllUserSessions('user-1', false, { excludeFamilyId: 'fam-new' });
+
+        expect(fakeFs.store.sessions['s-old'].exists).toBe(false);
+        expect(fakeFs.store.refreshTokens['rt-old'].exists).toBe(false);
+        expect(fakeFs.store.refreshTokenFamilies['fam-old'].exists).toBe(false);
+
+        expect(fakeFs.store.sessions['s-new'].exists).toBe(true);
+        expect(fakeFs.store.refreshTokens['rt-new'].exists).toBe(true);
+        expect(fakeFs.store.refreshTokenFamilies['fam-new'].exists).toBe(true);
+    });
+
+    it('retries Firebase token revocation once and never throws after records are deleted', async () => {
+        getAuth().revokeRefreshTokens
+            .mockRejectedValueOnce(new Error('Firebase error'))
+            .mockResolvedValue(undefined);
+        getNotificationService().sendDataOnlyNotificationSafe.mockResolvedValue(undefined);
+
+        const { SessionRevocationService } = loadService();
         await expect(SessionRevocationService.revokeAllUserSessions('user-1', true))
-            .rejects.toThrow('Firebase error');
+            .resolves.toBeUndefined();
+
+        expect(getAuth().revokeRefreshTokens).toHaveBeenCalledTimes(2);
+        expect(getNotificationService().sendDataOnlyNotificationSafe).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not throw when Firebase token revocation fails on both attempts', async () => {
+        getAuth().revokeRefreshTokens.mockRejectedValue(new Error('Firebase error'));
+        getNotificationService().sendDataOnlyNotificationSafe.mockResolvedValue(undefined);
+
+        const { SessionRevocationService } = loadService();
+        await expect(SessionRevocationService.revokeAllUserSessions('user-1', true))
+            .resolves.toBeUndefined();
+
+        expect(getAuth().revokeRefreshTokens).toHaveBeenCalledTimes(2);
+    });
+
+    it('does not throw when the notification fails', async () => {
+        getAuth().revokeRefreshTokens.mockResolvedValue(undefined);
+        getNotificationService().sendDataOnlyNotificationSafe.mockRejectedValue(new Error('push failed'));
+
+        const { SessionRevocationService } = loadService();
+        await expect(SessionRevocationService.revokeAllUserSessions('user-1', true))
+            .resolves.toBeUndefined();
+
+        expect(getAuth().revokeRefreshTokens).toHaveBeenCalledTimes(1);
     });
 });

@@ -1,6 +1,28 @@
 # Purrivacy Docker Deployment Notes
 
-Purrivacy is deployed as a separate Docker Compose project from Pawify. It does not use Dapr or Redis.
+Purrivacy is deployed as a separate Docker Compose project from Pawify. It does not use Dapr. Redis is optional: the default deployment uses process-local rate limiting (`RATE_LIMIT_STORE=memory`); set `RATE_LIMIT_STORE=redis` with `REDIS_URL` (e.g. Upstash/Memorystore) to share rate-limit counters across replicas — see README → Configuration.
+
+### Sharing Pawify's Redis on the same VPS
+
+Purrivacy can reuse the Redis instance Pawify already runs (the `redis:7.4-alpine` service in Pawify's compose). Purrivacy accesses it directly via `ioredis` while Pawify goes through Dapr — both can coexist safely:
+
+- **Key isolation is guaranteed by prefix.** Purrivacy writes only `purrivacy:rl:*` keys; Pawify's Dapr state/lock keys use their own `statestore||*` namespace. Neither can read, overwrite, or be mistaken for the other's keys.
+
+- **Networking:** Pawify's Redis is only `expose`d on its compose network (not published to the host). Purrivacy attaches to it automatically at deploy time: set `PURRIVACY_SHARED_REDIS_NETWORK=pawify_pawify-net` (verify the exact name with `docker network ls | grep pawify` on the VPS) alongside `RATE_LIMIT_STORE=redis`. `scripts/deploy_purrivacy_docker.sh` then generates a compose override attaching purrivacy to that external network, verifies the network exists before deploying, and **fails the deploy** if Redis is unreachable from inside the container. No manual VPS files needed — the attachment is regenerated on every deploy and removed when you stop setting the variable.
+
+- **`REDIS_URL`:** `redis://:<REDIS_PASSWORD>@redis:6379` — same `REDIS_PASSWORD` as Pawify's env, hostname `redis` resolves through the shared network. **If the password contains URL-special characters (`@`, `+`, `:`, `/`, `%`), it must be percent-encoded** (e.g. `@` → `%40`, `+` → `%2B`) or the URL parser will read the wrong host; the deploy-time connectivity check catches this loudly.
+
+- **Capacity note:** Pawify's Redis runs `maxmemory≈128mb` with `allkeys-lru`. Purrivacy's rate-limit keys are tiny and TTL-bounded (15–60 min windows), so their footprint is negligible, but under sustained memory pressure LRU eviction can drop counters (momentarily more lenient limits) and Purrivacy bursts can, in principle, evict Pawify state keys. If cross-service eviction is unacceptable, give Redis more `maxmemory` headroom or run a dedicated instance for Purrivacy.
+
+## Container Hardening
+
+The production service runs with:
+
+- Base image pinned by digest (`node:22-bookworm-slim@sha256:...`) — bump the digest deliberately when patching, and enable automated base-image rebuilds (e.g. Dependabot/Renovate on the Dockerfile).
+- `read_only: true` root filesystem with a small tmpfs at `/tmp`.
+- All Linux capabilities dropped (`cap_drop: [ALL]`) and `no-new-privileges:true`.
+- `init: true` (tini) for PID-1 signal handling and zombie reaping; the image `CMD` runs `node` directly so `SIGTERM` reaches the app's graceful-shutdown path (HTTP close, maintenance stop, rate-limit store close, Sentry flush).
+- Non-root `nodeapp` user, loopback-only host binding, memory/CPU/PID limits, read-only secrets mount (pre-existing).
 
 ## Host Route
 

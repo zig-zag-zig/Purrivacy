@@ -61,4 +61,38 @@ describe('Key Records API', () => {
         expect(finalRecords.keys.map(record => record.recordId)).not.toContain(added.recordId);
         expect(finalRecords.keys).toHaveLength(2);
     });
+
+    it('paginates key records with limit and cursor', async () => {
+        const { session } = await createApiUserSession(baseUrl);
+
+        const firstPageResponse = await requestJson(baseUrl, 'GET', '/user/key-records?limit=1', session.accessToken);
+        expect(firstPageResponse.status).toBe(200);
+        const firstPage = await firstPageResponse.json() as {
+            keys: Array<{ recordId: string }>;
+            nextCursor?: string;
+        };
+        expect(firstPage.keys).toHaveLength(1);
+        expect(firstPage.nextCursor).toEqual(expect.any(String));
+
+        const secondPageResponse = await requestJson(
+            baseUrl, 'GET',
+            `/user/key-records?limit=1&cursor=${encodeURIComponent(firstPage.nextCursor!)}`,
+            session.accessToken,
+        );
+        expect(secondPageResponse.status).toBe(200);
+        const secondPage = await secondPageResponse.json() as {
+            keys: Array<{ recordId: string }>;
+            nextCursor?: string;
+        };
+        expect(secondPage.keys).toHaveLength(1);
+        expect(secondPage.keys[0].recordId).not.toBe(firstPage.keys[0].recordId);
+        expect(secondPage.nextCursor).toBeUndefined();
+    });
+
+    it('rejects an invalid pagination limit', async () => {
+        const { session } = await createApiUserSession(baseUrl);
+
+        const response = await requestJson(baseUrl, 'GET', '/user/key-records?limit=0', session.accessToken);
+        expect(response.status).toBe(400);
+    });
 });

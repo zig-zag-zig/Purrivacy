@@ -9,15 +9,16 @@ jest.mock('../../../../../src/infrastructure/firebase/index.js', () => ({
     },
 }), { virtual: true });
 
-jest.mock('../../../../../src/features/mfa/application/MfaService', () => ({
-    MfaService: { verifyMfaCode: jest.fn() },
+jest.mock('../../../../../src/features/mfa/application/verifyMfaCode', () => ({
+    verifyMfaCode: jest.fn(),
 }));
 
-jest.mock('../../../../../src/features/session/application/SessionService', () => ({
-    SessionService: {
-        createSession: jest.fn(),
-        rotateRefreshToken: jest.fn(),
-    },
+jest.mock('../../../../../src/features/session/application/createSession', () => ({
+    createBackendSession: jest.fn(),
+}));
+
+jest.mock('../../../../../src/features/session/application/rotateRefreshToken', () => ({
+    rotateBackendRefreshToken: jest.fn(),
 }));
 
 jest.mock('../../../../../src/features/user/application/UserService', () => ({
@@ -33,8 +34,9 @@ const loadService = (): typeof import('../../../../../src/features/session/appli
 );
 
 const getAuth = () => require('../../../../../src/infrastructure/firebase/index.js').auth;
-const getMfaService = () => require('../../../../../src/features/mfa/application/MfaService').MfaService;
-const getSessionService = () => require('../../../../../src/features/session/application/SessionService').SessionService;
+const getVerifyMfaCode = () => require('../../../../../src/features/mfa/application/verifyMfaCode').verifyMfaCode;
+const getCreateBackendSession = () => require('../../../../../src/features/session/application/createSession').createBackendSession;
+const getRotateBackendRefreshToken = () => require('../../../../../src/features/session/application/rotateRefreshToken').rotateBackendRefreshToken;
 const getUserService = () => require('../../../../../src/features/user/application/UserService').UserService;
 
 describe('AuthSessionService', () => {
@@ -71,7 +73,7 @@ describe('AuthSessionService', () => {
     describe('createSession', () => {
         it('creates session for non-MFA user', async () => {
             getUserService().getUserMfaState.mockResolvedValue({ mfaEnabled: false });
-            getSessionService().createSession.mockResolvedValue({
+            getCreateBackendSession().mockResolvedValue({
                 accessToken: 'at', refreshToken: 'rt', accessTokenExpiresAt: 'x', refreshTokenExpiresAt: 'y',
                 mfaTrusted: false, mfaEnabled: false,
             });
@@ -82,15 +84,15 @@ describe('AuthSessionService', () => {
             expect(result.sessionResponse.accessToken).toBe('at');
             expect(result.sessionResponse.mfaEnabled).toBe(false);
             expect(result.newRecoveryCodes).toBeUndefined();
-            expect(getSessionService().createSession).toHaveBeenCalledWith('user-1', expect.objectContaining({
+            expect(getCreateBackendSession()).toHaveBeenCalledWith('user-1', expect.objectContaining({
                 userHasMfa: false, mfaTrusted: false, label: 'test', platform: 'jest',
             }));
         });
 
         it('verifies MFA code when user has MFA enabled', async () => {
             getUserService().getUserMfaState.mockResolvedValue({ mfaEnabled: true });
-            getMfaService().verifyMfaCode.mockResolvedValue(['RECOVERY-A', 'RECOVERY-B']);
-            getSessionService().createSession.mockResolvedValue({
+            getVerifyMfaCode().mockResolvedValue(['RECOVERY-A', 'RECOVERY-B']);
+            getCreateBackendSession().mockResolvedValue({
                 accessToken: 'at', refreshToken: 'rt', accessTokenExpiresAt: 'x', refreshTokenExpiresAt: 'y',
                 mfaTrusted: true, mfaEnabled: true,
             });
@@ -98,21 +100,21 @@ describe('AuthSessionService', () => {
 
             const result = await AuthSessionService.createSession('user-1', { mfaCode: '123456', mfaTrusted: true });
 
-            expect(getMfaService().verifyMfaCode).toHaveBeenCalledWith('user-1', false, '123456');
+            expect(getVerifyMfaCode()).toHaveBeenCalledWith('user-1', false, '123456');
             expect(result.newRecoveryCodes).toEqual(['RECOVERY-A', 'RECOVERY-B']);
             expect(result.sessionResponse.mfaTrusted).toBe(true);
         });
     });
 
     describe('refreshSession', () => {
-        it('delegates to SessionService.rotateRefreshToken', async () => {
+        it('delegates to rotateBackendRefreshToken', async () => {
             const expected = { accessToken: 'at2', refreshToken: 'rt2', accessTokenExpiresAt: 'a', refreshTokenExpiresAt: 'b', mfaTrusted: false, mfaEnabled: false };
-            getSessionService().rotateRefreshToken.mockResolvedValue(expected);
+            getRotateBackendRefreshToken().mockResolvedValue(expected);
             const { AuthSessionService } = loadService();
 
             const result = await AuthSessionService.refreshSession('old-rt', 'old-at');
 
-            expect(getSessionService().rotateRefreshToken).toHaveBeenCalledWith('old-rt', 'old-at');
+            expect(getRotateBackendRefreshToken()).toHaveBeenCalledWith('old-rt', 'old-at');
             expect(result).toBe(expected);
         });
     });

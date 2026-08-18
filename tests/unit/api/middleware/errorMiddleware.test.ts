@@ -1,6 +1,7 @@
 import { NextFunction, Request } from 'express';
 import { errorMiddleware } from '../../../../src/api/middleware/errorMiddleware';
 import { BadRequestError, NotFoundError } from '../../../../src/utils/errors';
+import { reloadModule } from '../../../helpers/reloadModule';
 import { createMockRequest, createMockResponse, MockResponse } from '../../../helpers/testFixtures';
 
 describe('errorMiddleware', () => {
@@ -113,5 +114,69 @@ describe('errorMiddleware', () => {
 
         expect(next).toHaveBeenCalledWith(expect.any(BadRequestError));
         expect(res.statusCodeValue).toBeUndefined();
+    });
+
+    it('logs malformed JSON at warn level without a stack trace', () => {
+        const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+        const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+        try {
+            process.env.LOG_LEVEL = 'warn';
+            const { errorMiddleware: reloadedMiddleware } = reloadModule<typeof import('../../../../src/api/middleware/errorMiddleware')>(
+                '../../src/api/middleware/errorMiddleware',
+            );
+
+            const req = createMockRequest({ path: '/v1/user' });
+            const res = createMockResponse();
+            res.locals.requestId = 'req-log-1';
+            const next: NextFunction = jest.fn();
+
+            const syntaxError = new SyntaxError('Unexpected token') as SyntaxError & { body?: unknown };
+            syntaxError.body = undefined;
+
+            reloadedMiddleware(syntaxError, req, res, next);
+
+            expect(res.statusCodeValue).toBe(400);
+            expect(errorSpy).not.toHaveBeenCalled();
+            expect(warnSpy).toHaveBeenCalledTimes(1);
+            const logLine = String(warnSpy.mock.calls[0][0]);
+            expect(logLine).toContain('"level":"warn"');
+            expect(logLine).toContain('invalid JSON request body');
+            expect(logLine).not.toContain('Unexpected token');
+            expect(logLine).not.toContain('at ');
+        } finally {
+            warnSpy.mockRestore();
+            errorSpy.mockRestore();
+            process.env.LOG_LEVEL = 'error';
+        }
+    });
+
+    it('logs oversized-body errors at warn level without a stack trace', () => {
+        const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+        const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+        try {
+            process.env.LOG_LEVEL = 'warn';
+            const { errorMiddleware: reloadedMiddleware } = reloadModule<typeof import('../../../../src/api/middleware/errorMiddleware')>(
+                '../../src/api/middleware/errorMiddleware',
+            );
+
+            const req = createMockRequest({ path: '/v1/user' });
+            const res = createMockResponse();
+            res.locals.requestId = 'req-log-2';
+            const next: NextFunction = jest.fn();
+
+            reloadedMiddleware({ type: 'entity.too.large', status: 413 }, req, res, next);
+
+            expect(res.statusCodeValue).toBe(413);
+            expect(errorSpy).not.toHaveBeenCalled();
+            expect(warnSpy).toHaveBeenCalledTimes(1);
+            const logLine = String(warnSpy.mock.calls[0][0]);
+            expect(logLine).toContain('"level":"warn"');
+            expect(logLine).toContain('request body too large');
+            expect(logLine).not.toContain('at ');
+        } finally {
+            warnSpy.mockRestore();
+            errorSpy.mockRestore();
+            process.env.LOG_LEVEL = 'error';
+        }
     });
 });

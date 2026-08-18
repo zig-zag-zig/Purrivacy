@@ -11,9 +11,11 @@ export interface RateLimitConfig {
     skipSuccessfulRequests?: boolean;
     skipResponse?: RateLimitSkipResponse;
     message?: string;
-}
-
-export interface RateLimitEntry {
-    count: number;
-    resetTime: number;
+    /**
+     * Marks a limiter as security-critical (brute-force/recovery/MFA/session
+     * boundaries). When the shared rate limit store is unavailable and
+     * `RATE_LIMIT_FAIL_CLOSED` is enabled, critical limiters reject requests
+     * instead of silently falling back to a process-local store.
+     */
+    critical?: boolean;
 }

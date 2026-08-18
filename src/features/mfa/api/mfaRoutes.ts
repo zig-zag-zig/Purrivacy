@@ -1,8 +1,9 @@
 import { Router } from 'express';
 import { asyncHandler } from '../../../utils/asyncHandler';
 import { ResponseUtils } from '../../../utils/responseUtils';
-import { MfaService } from '../application/MfaService';
 import { MfaSessionService } from '../application/MfaSessionService';
+import { setupMfa } from '../application/setupMfa';
+import { getRemainingMfaRecoveryCodes, regenerateMfaRecoveryCodes } from '../application/mfaRecoveryCodes';
 import { authenticate, verifySensitiveMfa } from '../../../api/middleware/authMiddleware';
 import { rateLimiter } from '../../../api/middleware/rateLimiter';
 import {
@@ -11,14 +12,21 @@ import {
 } from '../../../api/http/requestContextHelpers';
 import {
     parseMfaEnableRequest,
+    parseMfaSetupNonceRequest,
     parseSessionTrustRequest,
 } from './mfaRequests';
 
 const router = Router();
 
-// Setup MFA - generates secret and recovery codes
+// Setup MFA - generates secret and recovery codes. Requires a fresh-auth nonce
+// minted at POST /auth/session/mfa-setup-nonce (API-SEC-006).
 router.post('/setup', authenticate('session'), rateLimiter.sensitiveOperations, asyncHandler(async (req, res) => {
-    const { secret, otpauthUrl, recoveryCodes } = await MfaService.setupMfa(requireAuthenticatedUserId(req));
+    const nonce = parseMfaSetupNonceRequest(req.body);
+    const { secret, otpauthUrl, recoveryCodes } = await setupMfa(
+        requireAuthenticatedUserId(req),
+        requireSessionFamilyId(req),
+        nonce,
+    );
 
     ResponseUtils.success(res, {
         secret,
@@ -54,7 +62,7 @@ router.post('/session/trust', authenticate('session'), rateLimiter.mfaVerificati
 
 // Regenerate recovery codes
 router.post('/recovery-codes/regenerate', authenticate('session'), rateLimiter.mfaVerification, verifySensitiveMfa, rateLimiter.sensitiveOperations, asyncHandler(async (req, res) => {
-    const recoveryCodes = await MfaService.regenerateRecoveryCodes(requireAuthenticatedUserId(req));
+    const recoveryCodes = await regenerateMfaRecoveryCodes(requireAuthenticatedUserId(req));
 
     ResponseUtils.successWithRecoveryCodes(res, {
         recoveryCodes,
@@ -63,7 +71,7 @@ router.post('/recovery-codes/regenerate', authenticate('session'), rateLimiter.m
 
 // Get remaining recovery codes count
 router.get('/recovery-codes/remaining', authenticate('session'), rateLimiter.authenticatedRead, asyncHandler(async (req, res) => {
-    const remainingCodes = await MfaService.getRemainingRecoveryCodes(requireAuthenticatedUserId(req));
+    const remainingCodes = await getRemainingMfaRecoveryCodes(requireAuthenticatedUserId(req));
 
     ResponseUtils.success(res, {
         remainingCodes,

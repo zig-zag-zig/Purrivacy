@@ -2,6 +2,7 @@ import { BadRequestError } from '../../../../../src/utils/errors';
 import {
   getBearerToken,
   parseCreateSessionRequest,
+  parseMfaSetupNonceMintRequest,
   parseRecoveryChallengeRequest,
   parseRecoveryTokenRequest,
   parseRefreshSessionRequest,
@@ -58,6 +59,15 @@ describe('session and MFA request parsing', () => {
     expect(() => parseCreateSessionRequest({ mfaCode: '12345' })).toThrow(BadRequestError);
     expect(() => parseCreateSessionRequest({ mfaCode: 'a1b2c3d4e5f6' })).toThrow(BadRequestError);
     expect(() => parseCreateSessionRequest({ mfaCode: 123456 })).toThrow(BadRequestError);
+  });
+
+  it('parses the optional MFA code for the setup-nonce mint endpoint', () => {
+    expect(parseMfaSetupNonceMintRequest({ mfaCode: ' 123456 ' })).toEqual({ mfaCode: '123456' });
+    expect(parseMfaSetupNonceMintRequest({})).toEqual({ mfaCode: undefined });
+    expect(parseMfaSetupNonceMintRequest({ mfaCode: 'A1B2C3D4E5F6' })).toEqual({ mfaCode: 'A1B2C3D4E5F6' });
+
+    expect(() => parseMfaSetupNonceMintRequest({ mfaCode: '12345' })).toThrow(BadRequestError);
+    expect(() => parseMfaSetupNonceMintRequest({ mfaCode: 123456 })).toThrow(BadRequestError);
   });
 
   it('enforces refresh-token presence and length before session refresh', () => {

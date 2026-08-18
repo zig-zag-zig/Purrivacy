@@ -42,6 +42,17 @@ export class RateLimitError extends AppError {
     }
 }
 
+/**
+ * Raised when a security-critical rate limit store is unavailable and the
+ * deployment runs fail-closed. A 503 tells clients to back off and retry
+ * rather than treating the request as rate-limited (429).
+ */
+export class RateLimitUnavailableError extends AppError {
+    constructor(message: string = 'Rate limiting service temporarily unavailable', details?: Record<string, unknown>) {
+        super(message, 503, details);
+    }
+}
+
 export class AuthError extends AppError<AuthErrorDetails> {
     constructor(message: string, sessionError: AuthErrorDetails, statusCode: 403 | 401) {
         super(message, statusCode, sessionError);
@@ -63,5 +74,17 @@ export class MfaSetupExpiredError extends BadRequestError {
 export class MfaNotEnabledError extends BadRequestError {
     constructor(details?: Record<string, unknown>) {
         super('MFA is not enabled for this user', details);
+    }
+}
+
+export class KeyQuotaExceededError extends ConflictError {
+    constructor(details?: Record<string, unknown>) {
+        super('Key record quota exceeded', details);
+    }
+}
+
+export class TransitionError extends AppError {
+    constructor(message: string, details?: Record<string, unknown>) {
+        super(message, 500, details);
     }
 }

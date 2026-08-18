@@ -11,6 +11,13 @@ export interface EncryptedKeyRecordWithId {
 
 export interface UserEncryptedKeyRecordsResponse {
     keys: Array<EncryptedPayload & { recordId: string }>;
+    nextCursor?: string;
+}
+
+export interface KeyRecordListOptions {
+    limit?: number;
+    cursor?: string;
+    since?: number;
 }
 
 export interface UserRecoveryEncryptedData {
@@ -51,6 +58,11 @@ export interface SessionResponse {
     refreshTokenExpiresAt: string;
     mfaTrusted: boolean;
     mfaEnabled: boolean;
+    /**
+     * The refresh-token family id backing this session. Used by clients and
+     * by state transitions to exclude the session from bulk revocation.
+     */
+    sessionFamilyId: string;
 }
 
 export interface AuthErrorDetails {

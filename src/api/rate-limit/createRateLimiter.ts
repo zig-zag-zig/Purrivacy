@@ -1,43 +1,48 @@
 import { OutgoingHttpHeader, OutgoingHttpHeaders } from 'http';
 import { Request, Response, NextFunction } from 'express';
+import { env } from '../../config/env';
 import { RateLimitError } from '../../utils/errors';
 import { createLogger } from '../../utils/logger';
 import { apiMessages } from '../http/apiMessages';
 import { getClientIp } from './clientIp';
 import { rateLimitKeys } from './rateLimitKeys';
-import { RateLimitConfig, RateLimitEntry } from './rateLimitTypes';
+import { MemoryRateLimitStore } from './memoryRateLimitStore';
+import { getRateLimitStore } from './rateLimitStoreFactory';
+import { RateLimitUnavailableError } from '../../utils/errors';
+import { RateLimitConfig } from './rateLimitTypes';
+import { RateLimitCounterResult, RateLimitStore } from './rateLimitStoreTypes';
 
 const logger = createLogger('api.rateLimit');
 type WriteHeadHeaders = OutgoingHttpHeaders | OutgoingHttpHeader[];
 
-const cleanupExpiredEntries = (store: Map<string, RateLimitEntry>): void => {
-    const now = Date.now();
-    for (const [key, entry] of store.entries()) {
-        if (entry.resetTime <= now) {
-            store.delete(key);
-        }
-    }
-};
+/** Retry-After advertised when a critical limiter is unavailable. */
+const UNAVAILABLE_RETRY_AFTER_SECONDS = 60;
+
+/**
+ * Process-local fallback used for non-critical limiters when the configured
+ * shared store is unavailable (fail-open). Bounded like any memory store.
+ */
+const fallbackStore = new MemoryRateLimitStore();
 
 const setHeaders = (
     res: Response,
     config: RateLimitConfig,
-    entry: RateLimitEntry,
+    counter: RateLimitCounterResult,
     remaining: number,
 ): void => {
     res.setHeader('X-RateLimit-Limit', config.maxRequests.toString());
     res.setHeader('X-RateLimit-Remaining', Math.max(0, remaining).toString());
-    res.setHeader('X-RateLimit-Reset', Math.ceil(entry.resetTime / 1000).toString());
+    res.setHeader('X-RateLimit-Reset', Math.ceil(counter.resetTime / 1000).toString());
     res.setHeader('X-RateLimit-Policy', `${config.maxRequests};w=${config.windowMs / 1000}`);
 };
 
-const throwLimitExceeded = (
+const limitExceeded = (
     req: Request,
     res: Response,
     config: RateLimitConfig,
-    entry: RateLimitEntry,
-): never => {
-    const retryAfter = Math.ceil((entry.resetTime - Date.now()) / 1000);
+    counter: RateLimitCounterResult,
+): RateLimitError => {
+    const retryAfter = Math.max(1, Math.ceil((counter.resetTime - Date.now()) / 1000));
     logger.warn('rate limit exceeded', {
         requestId: res.locals.requestId,
         limiter: config.name || req.path,
@@ -52,9 +57,9 @@ const throwLimitExceeded = (
     });
 
     res.setHeader('Retry-After', retryAfter.toString());
-    setHeaders(res, config, entry, 0);
+    setHeaders(res, config, counter, 0);
 
-    throw new RateLimitError(config.message || apiMessages.rateLimit.default, {
+    return new RateLimitError(config.message || apiMessages.rateLimit.default, {
         retryAfter,
         limit: config.maxRequests,
         window: config.windowMs / 1000,
@@ -64,12 +69,12 @@ const throwLimitExceeded = (
 const attachResponseAdjustment = (
     req: Request,
     res: Response,
-    store: Map<string, RateLimitEntry>,
+    store: RateLimitStore,
     key: string,
     config: RateLimitConfig,
-    entry: RateLimitEntry,
+    counter: RateLimitCounterResult,
 ): void => {
-    let adjustedCount = entry.count;
+    let adjustedCount = counter.count;
     const originalWriteHead = res.writeHead.bind(res);
 
     res.writeHead = ((
@@ -77,7 +82,7 @@ const attachResponseAdjustment = (
         statusMessageOrHeaders?: string | WriteHeadHeaders,
         headers?: WriteHeadHeaders,
     ): Response => {
-        setHeaders(res, config, entry, config.maxRequests - adjustedCount);
+        setHeaders(res, config, counter, config.maxRequests - adjustedCount);
         if (typeof statusMessageOrHeaders === 'string') {
             return headers === undefined
                 ? originalWriteHead(statusCode, statusMessageOrHeaders)
@@ -98,47 +103,74 @@ const attachResponseAdjustment = (
             return;
         }
 
-        const latestEntry = store.get(key);
-        if (latestEntry && latestEntry.count > 0) {
-            latestEntry.count--;
-            adjustedCount = latestEntry.count;
-        }
+        void store.decrement(key, config.windowMs)
+            .then(() => {
+                adjustedCount = Math.max(0, adjustedCount - 1);
+            })
+            .catch((error: unknown) => {
+                logger.warn('failed to adjust rate limit count', {
+                    limiter: config.name || req.path,
+                    error,
+                });
+            });
     });
 };
 
-export const createRateLimiter = (config: RateLimitConfig) => {
-    const store = new Map<string, RateLimitEntry>();
-    let cleanupCounter = 0;
+export const createRateLimiter = (config: RateLimitConfig, storeOverride?: RateLimitStore) => {
+    const sharedStore = storeOverride ?? getRateLimitStore();
+    const failClosed = config.critical === true && env.rateLimitFailClosed;
+    const limiterName = config.name || 'rateLimit';
 
-    return (req: Request, res: Response, next: NextFunction): void => {
+    const run = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
         const key = config.keyGenerator ? config.keyGenerator(req) : rateLimitKeys.default(req);
-        const now = Date.now();
-        const existingEntry = store.get(key);
 
-        if (existingEntry && existingEntry.resetTime > now) {
-            if (existingEntry.count >= config.maxRequests) {
-                throwLimitExceeded(req, res, config, existingEntry);
-            }
-            existingEntry.count++;
-        } else {
-            store.set(key, {
-                count: 1,
-                resetTime: now + config.windowMs,
+        let counter: RateLimitCounterResult;
+        let activeStore = sharedStore;
+
+        try {
+            counter = await activeStore.increment(key, config.windowMs);
+        } catch (error) {
+            logger.error('rate limit store unavailable', {
+                limiter: limiterName,
+                store: activeStore.kind,
+                failClosed,
+                error,
             });
+
+            if (failClosed) {
+                res.setHeader('Retry-After', UNAVAILABLE_RETRY_AFTER_SECONDS.toString());
+                next(new RateLimitUnavailableError(undefined, {
+                    limiter: limiterName,
+                    retryAfter: UNAVAILABLE_RETRY_AFTER_SECONDS,
+                }));
+                return;
+            }
+
+            activeStore = fallbackStore;
+            counter = await activeStore.increment(key, config.windowMs);
         }
 
-        const currentEntry = store.get(key)!;
+        if (counter.count > config.maxRequests) {
+            next(limitExceeded(req, res, config, counter));
+            return;
+        }
+
         if (config.skipSuccessfulRequests || config.skipResponse) {
-            attachResponseAdjustment(req, res, store, key, config, currentEntry);
+            attachResponseAdjustment(req, res, activeStore, key, config, counter);
         } else {
-            setHeaders(res, config, currentEntry, config.maxRequests - currentEntry.count);
-        }
-
-        cleanupCounter++;
-        if (cleanupCounter % 100 === 0) {
-            cleanupExpiredEntries(store);
+            setHeaders(res, config, counter, config.maxRequests - counter.count);
         }
 
         next();
+    };
+
+    return (req: Request, res: Response, next: NextFunction): void => {
+        void run(req, res, next).catch((error: unknown) => {
+            logger.error('rate limiter failed unexpectedly', {
+                limiter: limiterName,
+                error,
+            });
+            next(error instanceof Error ? error : new Error('Rate limiter failure'));
+        });
     };
 };

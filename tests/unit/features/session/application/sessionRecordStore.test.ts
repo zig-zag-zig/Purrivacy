@@ -108,30 +108,51 @@ describe('sessionRecordStore', () => {
         });
     });
 
-    describe('queueFamilyRecordDeletes', () => {
-        it('queues deletion of sessions, tokens, and the family document', async () => {
-            const { queueFamilyRecordDeletes } = loadModule();
+    describe('deleteFamilyRecords', () => {
+        it('deletes the family document first, then its sessions and tokens', async () => {
+            const { deleteFamilyRecords } = loadModule();
 
             fakeFs.store.sessions = { 's-1': { exists: true, data: { refreshTokenFamilyId: 'fam-del' } } };
             fakeFs.store.refreshTokens = { 'rt-1': { exists: true, data: { familyId: 'fam-del' } } };
             fakeFs.store.refreshTokenFamilies = { 'fam-del': { exists: true, data: { familyId: 'fam-del' } } };
 
-            const batch = fakeFs.db.batch();
             const familyRef = fakeFs.db.collection('refreshTokenFamilies').doc('fam-del');
+            const count = await deleteFamilyRecords('fam-del', familyRef);
 
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            await queueFamilyRecordDeletes(batch as any, 'fam-del', familyRef);
-            await batch.commit();
-
+            expect(count).toBe(3);
             expect(fakeFs.store.refreshTokenFamilies['fam-del'].exists).toBe(false);
             expect(fakeFs.store.sessions['s-1'].exists).toBe(false);
             expect(fakeFs.store.refreshTokens['rt-1'].exists).toBe(false);
         });
+
+        it('does not delete records belonging to other families', async () => {
+            const { deleteFamilyRecords } = loadModule();
+
+            fakeFs.store.sessions = {
+                's-1': { exists: true, data: { refreshTokenFamilyId: 'fam-del' } },
+                's-other': { exists: true, data: { refreshTokenFamilyId: 'fam-keep' } },
+            };
+            fakeFs.store.refreshTokens = {
+                'rt-1': { exists: true, data: { familyId: 'fam-del' } },
+                'rt-other': { exists: true, data: { familyId: 'fam-keep' } },
+            };
+            fakeFs.store.refreshTokenFamilies = {
+                'fam-del': { exists: true, data: { familyId: 'fam-del' } },
+                'fam-keep': { exists: true, data: { familyId: 'fam-keep' } },
+            };
+
+            const familyRef = fakeFs.db.collection('refreshTokenFamilies').doc('fam-del');
+            await deleteFamilyRecords('fam-del', familyRef);
+
+            expect(fakeFs.store.refreshTokenFamilies['fam-del'].exists).toBe(false);
+            expect(fakeFs.store.sessions['s-other'].exists).toBe(true);
+            expect(fakeFs.store.refreshTokens['rt-other'].exists).toBe(true);
+        });
     });
 
-    describe('queueStaleDeviceFamilyDeletes', () => {
+    describe('deleteStaleDeviceFamilies', () => {
         it('deletes old families for the same device but keeps the new one', async () => {
-            const { queueStaleDeviceFamilyDeletes } = loadModule();
+            const { deleteStaleDeviceFamilies } = loadModule();
 
             fakeFs.store.refreshTokenFamilies = {
                 'old-fam': { exists: true, data: { familyId: 'old-fam', userId: 'user-1', deviceId: 'dev-1' } },
@@ -139,14 +160,31 @@ describe('sessionRecordStore', () => {
                 'other-user-fam': { exists: true, data: { familyId: 'other', userId: 'user-2', deviceId: 'dev-1' } },
             };
 
-            const batch = fakeFs.db.batch();
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            await queueStaleDeviceFamilyDeletes(batch as any, 'user-1', 'dev-1', 'new-fam');
-            await batch.commit();
+            const count = await deleteStaleDeviceFamilies('user-1', 'dev-1', 'new-fam');
 
+            expect(count).toBe(1);
             expect(fakeFs.store.refreshTokenFamilies['old-fam'].exists).toBe(false);
             expect(fakeFs.store.refreshTokenFamilies['new-fam'].exists).toBe(true);
             expect(fakeFs.store.refreshTokenFamilies['other-user-fam'].exists).toBe(true);
+        });
+
+        it('also removes the stale family sessions and tokens', async () => {
+            const { deleteStaleDeviceFamilies } = loadModule();
+
+            fakeFs.store.refreshTokenFamilies = {
+                'old-fam': { exists: true, data: { familyId: 'old-fam', userId: 'user-1', deviceId: 'dev-1' } },
+            };
+            fakeFs.store.sessions = {
+                's-1': { exists: true, data: { refreshTokenFamilyId: 'old-fam' } },
+            };
+            fakeFs.store.refreshTokens = {
+                'rt-1': { exists: true, data: { familyId: 'old-fam' } },
+            };
+
+            await deleteStaleDeviceFamilies('user-1', 'dev-1', 'new-fam');
+
+            expect(fakeFs.store.sessions['s-1'].exists).toBe(false);
+            expect(fakeFs.store.refreshTokens['rt-1'].exists).toBe(false);
         });
     });
 });

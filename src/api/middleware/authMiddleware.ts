@@ -1,9 +1,11 @@
 import { Request, Response, NextFunction } from 'express';
-import { SessionService } from '../../features/session/application/SessionService';
-import { AppError, AuthError } from '../../utils/errors';
-import { MfaService } from '../../features/mfa/application/MfaService';
+import { validateBackendSession } from '../../features/session/application/validateSession';
+import { deleteAccessSession } from '../../features/session/application/sessionDeletion';
+import { markSessionFamilyMfaVerified } from '../../features/session/application/sessionFamilyMutations';
+import { verifyMfaCode } from '../../features/mfa/application/verifyMfaCode';
 import { AuthSessionService } from '../../features/session/application/AuthSessionService';
 import { UserService } from '../../features/user/application/UserService';
+import { AppError, AuthError } from '../../utils/errors';
 import { createLogger } from '../../utils/logger';
 import { getBearerToken } from '../http/requestParsing';
 import { requireAuthenticatedUserId } from '../http/requestContextHelpers';
@@ -28,7 +30,7 @@ export function authenticate(method: 'firebase' | 'session' | 'sessionSensitive'
                 throw new AuthError('Bearer access token was not provided', { sessionHeaderMissing: true }, 401);
             }
 
-            const session = await SessionService.validateSession(accessToken);
+            const session = await validateBackendSession(accessToken);
             req.userId = session.userId;
             req.sessionFamilyId = session.refreshTokenFamilyId;
 
@@ -36,7 +38,7 @@ export function authenticate(method: 'firebase' | 'session' | 'sessionSensitive'
                 req.userData = await UserService.getUserMfaState(session.userId);
             } catch (error) {
                 if (error instanceof AppError && error.statusCode === 404) {
-                    await SessionService.deleteSession(accessToken);
+                    await deleteAccessSession(accessToken);
                 }
                 throw error;
             }
@@ -74,10 +76,10 @@ export async function verifySensitiveMfa(req: Request, res: Response, next: Next
             return;
         }
 
-        res.locals.newRecoveryCodes = await MfaService.verifyMfaCode(userId, true, req.body.mfaCode);
+        res.locals.newRecoveryCodes = await verifyMfaCode(userId, true, req.body.mfaCode);
         const sessionFamilyId = req.sessionFamilyId;
         if (sessionFamilyId) {
-            await SessionService.markFamilyMfaVerified(sessionFamilyId, userId);
+            await markSessionFamilyMfaVerified(sessionFamilyId, userId);
         }
         next();
     } catch (error) {

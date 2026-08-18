@@ -61,6 +61,7 @@ describe('sessionTokenUtils', () => {
       refreshTokenExpiresAt: '2026-04-01T00:00:00.000Z',
       mfaEnabled: true,
       mfaTrusted: false,
+      sessionFamilyId: 'family-1',
     });
   });
 });

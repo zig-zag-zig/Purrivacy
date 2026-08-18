@@ -71,3 +71,9 @@ export class KeyQuotaExceededError extends ConflictError {
         super('Key record quota exceeded', details);
     }
 }
+
+export class TransitionError extends AppError {
+    constructor(message: string, details?: Record<string, unknown>) {
+        super(message, 500, details);
+    }
+}

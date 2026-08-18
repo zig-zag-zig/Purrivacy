@@ -20,6 +20,10 @@ jest.mock('../../../../../src/features/notification/infrastructure/pushTokenStor
     deleteUserPushTokensFromDb: jest.fn(),
 }));
 
+jest.mock('../../../../../src/features/session/application/SessionRevocationService', () => ({
+    SessionRevocationService: { revokeAllUserSessions: jest.fn() },
+}));
+
 const loadModule = (): typeof import('../../../../../src/features/user/application/userWrites') => (
     require('../../../../../src/features/user/application/userWrites')
 );
@@ -27,6 +31,7 @@ const loadModule = (): typeof import('../../../../../src/features/user/applicati
 const getNotificationService = () => require('../../../../../src/features/notification/application/NotificationService').NotificationService;
 const getUserKeyRepo = () => require('../../../../../src/features/user/infrastructure/UserKeyRepository');
 const getPushTokenStore = () => require('../../../../../src/features/notification/infrastructure/pushTokenStore');
+const getRevocationService = () => require('../../../../../src/features/session/application/SessionRevocationService').SessionRevocationService;
 
 describe('userWrites', () => {
     beforeEach(() => {
@@ -84,17 +89,54 @@ describe('userWrites', () => {
     });
 
     describe('deleteUser', () => {
-        it('deletes user, security subcollection, keys, and push tokens', async () => {
+        it('revokes sessions first, then deletes user, security subcollection, keys, and push tokens', async () => {
             const securityPath = 'users/user-1/security';
             fakeFs.store.users = { 'user-1': { exists: true, data: { mfaEnabled: true } } };
             fakeFs.store[securityPath] = { mfa: { exists: true, data: { mfaSecret: 's' } } };
+            getRevocationService().revokeAllUserSessions.mockResolvedValue(undefined);
 
             const { deleteUser } = loadModule();
 
             await deleteUser('user-1');
 
+            expect(getRevocationService().revokeAllUserSessions).toHaveBeenCalledWith('user-1', true);
             expect(fakeFs.store.users['user-1'].exists).toBe(false);
             expect(fakeFs.store[securityPath].mfa.exists).toBe(false);
+            expect(getUserKeyRepo().deleteUserEncryptedKeys).toHaveBeenCalledWith('user-1');
+            expect(getPushTokenStore().deleteUserPushTokensFromDb).toHaveBeenCalledWith('user-1');
+        });
+
+        it('throws a structured retryable error on partial failure identifying the remaining steps', async () => {
+            fakeFs.store.users = { 'user-1': { exists: true, data: { mfaEnabled: true } } };
+            getRevocationService().revokeAllUserSessions
+                .mockRejectedValueOnce(new Error('revocation failed'))
+                .mockResolvedValue(undefined);
+
+            const { deleteUser } = loadModule();
+
+            await expect(deleteUser('user-1')).rejects.toMatchObject({
+                statusCode: 500,
+                details: {
+                    failedStep: 'revokeSessions',
+                    retryable: true,
+                    remainingSteps: [
+                        'revokeSessions',
+                        'deleteUserDocuments',
+                        'deleteEncryptedKeys',
+                        'deletePushTokens',
+                    ],
+                },
+            });
+
+            // Nothing was deleted by the failed attempt.
+            expect(fakeFs.store.users['user-1'].exists).toBe(true);
+            expect(getUserKeyRepo().deleteUserEncryptedKeys).not.toHaveBeenCalled();
+
+            // A retry completes the remaining steps.
+            await deleteUser('user-1');
+
+            expect(fakeFs.store.users['user-1'].exists).toBe(false);
+            expect(getRevocationService().revokeAllUserSessions).toHaveBeenCalledTimes(2);
             expect(getUserKeyRepo().deleteUserEncryptedKeys).toHaveBeenCalledWith('user-1');
             expect(getPushTokenStore().deleteUserPushTokensFromDb).toHaveBeenCalledWith('user-1');
         });

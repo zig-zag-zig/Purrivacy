@@ -18,6 +18,7 @@ describe('buildSessionResponse', () => {
         expect(result.refreshTokenExpiresAt).toBe('2026-04-01T00:00:00.000Z');
         expect(result.mfaEnabled).toBe(true);
         expect(result.mfaTrusted).toBe(true);
+        expect(result.sessionFamilyId).toBe('family-1');
     });
 
     it('is falsey for MFA when userHasMfa is false', () => {

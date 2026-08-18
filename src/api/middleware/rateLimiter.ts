@@ -11,6 +11,7 @@ export const rateLimiter = {
         maxRequests: 5,
         keyGenerator: rateLimitKeys.byUser(true),
         skipSuccessfulRequests: true,
+        critical: true,
         message: apiMessages.rateLimit.mfaVerification,
     }),
 
@@ -19,6 +20,7 @@ export const rateLimiter = {
         windowMs: 60 * MINUTE,
         maxRequests: 10,
         keyGenerator: rateLimitKeys.byUsername(),
+        critical: true,
         message: apiMessages.rateLimit.authentication,
     }),
 
@@ -51,6 +53,7 @@ export const rateLimiter = {
         maxRequests: 5,
         keyGenerator: rateLimitKeys.byUser(),
         skipSuccessfulRequests: true,
+        critical: true,
         skipResponse: (_req, res) => {
             const details = res.locals.errorDetails;
             return res.statusCode === 403 && details?.mfaRequired === true && details?.wrongMfaCode !== true;
@@ -71,6 +74,7 @@ export const rateLimiter = {
         maxRequests: 20,
         keyGenerator: rateLimitKeys.byRefreshToken(),
         skipSuccessfulRequests: true,
+        critical: true,
         message: apiMessages.rateLimit.sessionRefresh,
     }),
 
@@ -79,6 +83,7 @@ export const rateLimiter = {
         windowMs: 15 * MINUTE,
         maxRequests: 5,
         keyGenerator: rateLimitKeys.byUser(true),
+        critical: true,
         message: apiMessages.rateLimit.sensitiveOperations,
     }),
 

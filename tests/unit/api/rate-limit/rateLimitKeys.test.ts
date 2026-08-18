@@ -14,15 +14,19 @@ const request = (overrides: Record<string, unknown> = {}): Request => ({
 } as Request);
 
 describe('rate-limit key helpers', () => {
-  it('prefers a non-local socket address and only falls back to forwarded headers for local peers', () => {
+  it('uses the socket address when no Express-resolved req.ip is present', () => {
     expect(getClientIp(request({
       headers: { 'x-forwarded-for': '198.51.100.7, 198.51.100.8' },
     }))).toBe('203.0.113.10');
+  });
 
+  it('does not trust forwarded headers from local peers without a trusted proxy (spoof protection)', () => {
+    // Express only sets req.ip from X-Forwarded-For when the immediate peer
+    // is trusted; raw header inspection is deliberately avoided.
     expect(getClientIp(request({
       socket: { remoteAddress: '127.0.0.1' },
       headers: { 'x-forwarded-for': '198.51.100.7, 198.51.100.8' },
-    }))).toBe('198.51.100.7');
+    }))).toBe('unknown');
   });
 
   it('keys username attempts case-insensitively and without surrounding whitespace', () => {

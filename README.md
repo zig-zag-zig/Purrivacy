@@ -194,7 +194,10 @@ After Docker is healthy, the VPS tunnel can keep pointing at `http://127.0.0.1:3
 | `PORT` | No | Server port. Defaults to `5000`. |
 | `NODE_ENV` | No | Runtime environment. Defaults to `development`. |
 | `LOG_LEVEL` | No | Logger level. Defaults to `info`. |
-| `TRUST_PROXY` | No | Enables Express `trust proxy` when running behind a proxy. |
+| `TRUST_PROXY` | No | Express `trust proxy` configuration: `true`/`false`, `loopback`, a hop count (`1`, `2`), or comma-separated trusted subnets (`10.0.0.0/8, 127.0.0.1`). Defaults to `false`. Prefer `loopback` for the documented single-tunnel deployment. |
+| `RATE_LIMIT_STORE` | No | Rate limit store: `memory` (default, process-local) or `redis` (shared across replicas). Use `redis` before running multiple instances. |
+| `REDIS_URL` | No | Redis connection URL, required when `RATE_LIMIT_STORE=redis`. |
+| `RATE_LIMIT_FAIL_CLOSED` | No | When a configured shared store is unavailable: `true` rejects requests on security-critical limiters (503), `false` falls back to a local memory store. Defaults to `true` in production. |
 | `ALLOWED_ORIGINS` | No | Comma-separated list of allowed origins for deployments that use CORS at the edge/app layer. |
 | `AUTH_EMAIL_DOMAIN` | Yes | Email domain used by the app authentication flow. |
 | `GOOGLE_APPLICATION_CREDENTIALS` | Yes* | Absolute path to a Firebase service account JSON file. |
@@ -353,7 +356,8 @@ Purrivacy Firebase emulator tests use `127.0.0.1:9099`, `127.0.0.1:8080`, and `1
 - Run `npm run build` before deploying locally if needed; it runs tests and then compiles TypeScript.
 - Docker images compile with `npm run build:unchecked` after GitHub Actions has already run `npm run build`.
 - Set `NODE_ENV=production`.
-- Set `TRUST_PROXY=true` when the app runs behind a trusted proxy or load balancer.
+- Set `TRUST_PROXY=loopback` when the app runs behind a single local tunnel/proxy, or list the exact trusted subnets. Avoid the broad `true` value.
+- Rate limits are process-local by default. Before running multiple replicas, set `RATE_LIMIT_STORE=redis` with a shared `REDIS_URL`; security-critical limiters then reject requests (503) when Redis is unavailable (`RATE_LIMIT_FAIL_CLOSED=true`, the production default).
 - Prefer environment-managed secrets over files in hosted environments.
 - Rotate `MFA_KEK` carefully; existing encrypted MFA secrets depend on it.
 - Keep Firebase service account permissions scoped to what the API needs.

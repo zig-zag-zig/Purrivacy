@@ -8,20 +8,9 @@ Purrivacy can reuse the Redis instance Pawify already runs (the `redis:7.4-alpin
 
 - **Key isolation is guaranteed by prefix.** Purrivacy writes only `purrivacy:rl:*` keys; Pawify's Dapr state/lock keys use their own `statestore||*` namespace. Neither can read, overwrite, or be mistaken for the other's keys.
 
-- **Networking:** Pawify's Redis is only `expose`d on `pawify-net` (not published to the host). Attach Purrivacy's service to that network as an external network:
+- **Networking:** Pawify's Redis is only `expose`d on its compose network (not published to the host). Purrivacy attaches to it automatically at deploy time: set `PURRIVACY_SHARED_REDIS_NETWORK=pawify_pawify-net` (verify the exact name with `docker network ls | grep pawify` on the VPS) alongside `RATE_LIMIT_STORE=redis`. `scripts/deploy_purrivacy_docker.sh` then generates a compose override attaching purrivacy to that external network, verifies the network exists before deploying, and **fails the deploy** if Redis is unreachable from inside the container. No manual VPS files needed — the attachment is regenerated on every deploy and removed when you stop setting the variable.
 
-  ```yaml
-  # docker-compose.override.yml (VPS only — do not commit)
-  services:
-    purrivacy:
-      networks: [default, pawify]
-  networks:
-    pawify:
-      external: true
-      name: pawify_pawify-net   # docker network ls | grep pawify
-  ```
-
-- **`REDIS_URL`:** `redis://:<REDIS_PASSWORD>@redis:6379` — same `REDIS_PASSWORD` as Pawify's env, hostname resolves through the shared network.
+- **`REDIS_URL`:** `redis://:<REDIS_PASSWORD>@redis:6379` — same `REDIS_PASSWORD` as Pawify's env, hostname `redis` resolves through the shared network. **If the password contains URL-special characters (`@`, `+`, `:`, `/`, `%`), it must be percent-encoded** (e.g. `@` → `%40`, `+` → `%2B`) or the URL parser will read the wrong host; the deploy-time connectivity check catches this loudly.
 
 - **Capacity note:** Pawify's Redis runs `maxmemory≈128mb` with `allkeys-lru`. Purrivacy's rate-limit keys are tiny and TTL-bounded (15–60 min windows), so their footprint is negligible, but under sustained memory pressure LRU eviction can drop counters (momentarily more lenient limits) and Purrivacy bursts can, in principle, evict Pawify state keys. If cross-service eviction is unacceptable, give Redis more `maxmemory` headroom or run a dedicated instance for Purrivacy.
 

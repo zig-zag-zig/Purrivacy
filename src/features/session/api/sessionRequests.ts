@@ -5,7 +5,7 @@ import {
     parseOptionalTrimmedString,
 } from '../../../api/http/requestParsing';
 
-export type CreateSessionBody = {
+type CreateSessionBody = {
     mfaCode?: string;
     mfaTrusted?: boolean;
     label?: string;

@@ -1,6 +1,7 @@
 import { auth } from '../../../infrastructure/firebase';
-import { MfaService } from '../../mfa/application/MfaService';
-import { SessionService } from './SessionService';
+import { verifyMfaCode } from '../../mfa/application/verifyMfaCode';
+import { createBackendSession } from './createSession';
+import { rotateBackendRefreshToken } from './rotateRefreshToken';
 import { UserService } from '../../user/application/UserService';
 import { SessionResponse } from '../../../core/types';
 import { AuthError } from '../../../utils/errors';
@@ -46,11 +47,11 @@ export class AuthSessionService {
         let newRecoveryCodes: string[] | undefined;
 
         if (mfaEnabled) {
-            newRecoveryCodes = await MfaService.verifyMfaCode(userId, false, request.mfaCode);
+            newRecoveryCodes = await verifyMfaCode(userId, false, request.mfaCode);
             mfaTrusted = request.mfaTrusted === true;
         }
 
-        const sessionResponse = await SessionService.createSession(userId, {
+        const sessionResponse = await createBackendSession(userId, {
             userHasMfa: mfaEnabled,
             mfaTrusted,
             label: request.label,
@@ -68,6 +69,6 @@ export class AuthSessionService {
         refreshToken: string,
         currentAccessToken?: string
     ): Promise<SessionResponse> {
-        return SessionService.rotateRefreshToken(refreshToken, currentAccessToken);
+        return rotateBackendRefreshToken(refreshToken, currentAccessToken);
     }
 }

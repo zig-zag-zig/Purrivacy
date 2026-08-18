@@ -22,11 +22,11 @@ import { verifyMfaCode } from './verifyMfaCode';
  */
 
 export const MFA_SETUP_NONCE_TTL_MS = 5 * 60 * 1000; // 5 minutes
-export const FRESH_SESSION_WINDOW_MS = 10 * 60 * 1000; // 10 minutes
-export const MFA_SETUP_NONCE_MIN_LENGTH = 32;
-export const MFA_SETUP_NONCE_MAX_LENGTH = 128;
+const FRESH_SESSION_WINDOW_MS = 10 * 60 * 1000; // 10 minutes
+const MFA_SETUP_NONCE_MIN_LENGTH = 32;
+const MFA_SETUP_NONCE_MAX_LENGTH = 128;
 
-export interface MfaSetupNonceRecord {
+interface MfaSetupNonceRecord {
     userId: string;
     sessionFamilyId: string;
     createdAt: Date;

@@ -16,14 +16,14 @@ import { CryptoUtils } from '../../../utils/cryptoUtils';
  * existing users keep working during migration.
  */
 
-export const RECOVERY_VERIFIER_HASH_PREFIX = 'v1:';
+const RECOVERY_VERIFIER_HASH_PREFIX = 'v1:';
 const PREFIXED_LENGTH = RECOVERY_VERIFIER_HASH_PREFIX.length + 64;
 
 export const pepperRecoveryVerifierHash = (clientHash: string): string => (
     `${RECOVERY_VERIFIER_HASH_PREFIX}${CryptoUtils.hmacSha256(env.recoveryVerifierPepper, clientHash)}`
 );
 
-export const isPepperedRecoveryVerifierHash = (storedHash: string): boolean => (
+const isPepperedRecoveryVerifierHash = (storedHash: string): boolean => (
     storedHash.startsWith(RECOVERY_VERIFIER_HASH_PREFIX) && storedHash.length === PREFIXED_LENGTH
 );
 

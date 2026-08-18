@@ -4,8 +4,8 @@ import { ResponseUtils } from '../../../utils/responseUtils';
 import { AuthSessionService } from '../application/AuthSessionService';
 import { authenticate, verifySensitiveMfa } from '../../../api/middleware/authMiddleware';
 import { SessionRevocationService } from '../application/SessionRevocationService';
-import { SessionService } from '../application/SessionService';
-import { MfaService } from '../../mfa/application/MfaService';
+import { revokeSessionFamily } from '../application/sessionFamilyMutations';
+import { mintMfaSetupNonce } from '../../mfa/application/mfaSetupNonce';
 import { rateLimiter } from '../../../api/middleware/rateLimiter';
 import {
     requireAuthenticatedUserId,
@@ -54,7 +54,7 @@ router.post('/session/refresh', rateLimiter.sessionRefresh, asyncHandler(async (
 // a valid current code is provided.
 router.post('/session/mfa-setup-nonce', authenticate('session'), rateLimiter.sensitiveOperations, asyncHandler(async (req, res) => {
     const { mfaCode } = parseMfaSetupNonceMintRequest(req.body);
-    const nonceResult = await MfaService.mintMfaSetupNonce(
+    const nonceResult = await mintMfaSetupNonce(
         requireAuthenticatedUserId(req),
         requireSessionFamilyId(req),
         mfaCode,
@@ -82,7 +82,7 @@ router.post('/revoke-all-sessions', authenticate('session'), rateLimiter.mfaVeri
 
 // Sign out - delete the current refresh-token family
 router.post('/sign-out', authenticate('session'), rateLimiter.authenticatedWrite, asyncHandler(async (req, res) => {
-    await SessionService.revokeFamily(requireSessionFamilyId(req), requireAuthenticatedUserId(req));
+    await revokeSessionFamily(requireSessionFamilyId(req), requireAuthenticatedUserId(req));
     ResponseUtils.noContent(res);
 }));
 

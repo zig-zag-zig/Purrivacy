@@ -33,7 +33,7 @@ export interface TransitionStore {
     clear(): Promise<void>;
 }
 
-export interface TransitionExecution {
+interface TransitionExecution {
     status: 'completed' | 'failed';
     completedSteps: string[];
     failedStep?: string;

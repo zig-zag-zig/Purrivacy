@@ -32,7 +32,7 @@ export const deleteDocumentsInChunks = async (
     return deletedCount;
 };
 
-export interface PagedDeleteResult {
+interface PagedDeleteResult {
     deletedCount: number;
     truncated: boolean;
 }

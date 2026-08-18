@@ -3,9 +3,12 @@ import { AppError, TransitionError } from '../../../utils/errors';
 import { createLogger } from '../../../utils/logger';
 import { executeTransition, TransitionStep } from '../../../core/transitions/transitionRunner';
 import { MfaTransitionStore } from './mfaTransitionStore';
-import { MfaService } from './MfaService';
+import { verifyMfaCode } from './verifyMfaCode';
+import { verifyAndEnableMfa } from './enableMfa';
+import { disableMfa } from './disableMfa';
 import { UserService } from '../../user/application/UserService';
-import { SessionService } from '../../session/application/SessionService';
+import { createBackendSession } from '../../session/application/createSession';
+import { revokeSessionFamily, setSessionFamilyMfaTrust } from '../../session/application/sessionFamilyMutations';
 import { SessionRevocationService } from '../../session/application/SessionRevocationService';
 import { CreateSessionOptions } from '../../session/application/sessionTypes';
 
@@ -88,10 +91,10 @@ export class MfaSessionService {
                     // take this path — setupMfa rejects enabled accounts,
                     // so a fresh double-enable keeps failing with the
                     // original setup error.
-                    await MfaService.verifyMfaCode(userId, true, mfaCode);
+                    await verifyMfaCode(userId, true, mfaCode);
                     return;
                 }
-                await MfaService.verifyAndEnableMfa(userId, mfaCode, currentDeviceId);
+                await verifyAndEnableMfa(userId, mfaCode, currentDeviceId);
             },
         });
     }
@@ -125,7 +128,7 @@ export class MfaSessionService {
                 deviceId: currentDeviceId,
             },
             applyMfaState: async () => {
-                await MfaService.disableMfa(userId, currentDeviceId);
+                await disableMfa(userId, currentDeviceId);
             },
         });
     }
@@ -138,7 +141,7 @@ export class MfaSessionService {
         sessionFamilyId: string,
         mfaTrusted: boolean
     ): Promise<{ mfaTrusted: boolean }> {
-        return SessionService.setFamilyMfaTrust(sessionFamilyId, userId, mfaTrusted);
+        return setSessionFamilyMfaTrust(sessionFamilyId, userId, mfaTrusted);
     }
 
     private static async runTransition(config: MfaTransitionConfig): Promise<SessionResponse> {
@@ -153,7 +156,7 @@ export class MfaSessionService {
             {
                 name: 'createSession',
                 run: async () => {
-                    const response = await SessionService.createSession(userId, sessionOptions);
+                    const response = await createBackendSession(userId, sessionOptions);
                     sessionResponse = response;
                     return response;
                 },
@@ -199,7 +202,7 @@ export class MfaSessionService {
             // state that never materialized. Revoke it so no orphan session
             // remains, and clear the progress so a retry starts fresh.
             try {
-                await SessionService.revokeFamily(sessionResponse.sessionFamilyId, userId);
+                await revokeSessionFamily(sessionResponse.sessionFamilyId, userId);
                 await store.clear();
             } catch (compensationError) {
                 logger.error('mfa transition compensation revocation failed', {

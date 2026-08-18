@@ -25,7 +25,7 @@ export type UserEncryptedKeysRecordSet = {
     updatedAt: number;
 };
 
-export type UserEncryptedKeyRecordEntry = {
+type UserEncryptedKeyRecordEntry = {
     recordId: string;
     key: EncryptedPayload;
     updatedAt?: number;

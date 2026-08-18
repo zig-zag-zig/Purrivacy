@@ -46,6 +46,18 @@ jobs:
       - name: Build app
         run: npm run build
 
+      - name: Knip dead-code check
+        # Non-blocking hygiene gate (API-ARCH-004). Flip continue-on-error to
+        # false once the ignoreIssues baseline in knip.json is final and the
+        # check has been green on a few PRs.
+        continue-on-error: true
+        run: npx --yes knip@5
+
+      - name: Production dependency audit
+        # Blocking: fail the build on high/critical vulnerabilities in the
+        # production dependency tree.
+        run: npm audit --omit=dev --audit-level=high
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 

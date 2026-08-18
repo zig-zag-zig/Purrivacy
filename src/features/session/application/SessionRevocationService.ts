@@ -1,5 +1,5 @@
 import { auth } from '../../../infrastructure/firebase';
-import { SessionService } from './SessionService';
+import { deleteAllUserSessions } from './sessionDeletion';
 import { NotificationService } from '../../notification/application/NotificationService';
 import { createLogger } from '../../../utils/logger';
 
@@ -45,7 +45,7 @@ export class SessionRevocationService {
         revokeFbTokenAndSendDataOnlyNotification: boolean,
         options: { excludeFamilyId?: string } = {},
     ): Promise<void> {
-        await SessionService.deleteAllUserSessions(userId, options);
+        await deleteAllUserSessions(userId, options);
 
         if (!revokeFbTokenAndSendDataOnlyNotification) {
             logger.info('all user sessions revoked', { userId });

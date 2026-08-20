@@ -38,7 +38,9 @@ interface PagedDeleteResult {
 }
 
 /**
- * Repeatedly run `query.limit(pageSize)` and delete every returned document,
+ * Repeatedly run `query.limit(pageSize)` and delete every returned document
+ * (optionally filtered in code — used to exclude one refresh-token family
+ * without a `!=` query, which would require a composite Firestore index),
  * until the query returns no documents or `maxPages` pages have been
  * processed. Deletions are committed in chunks below the Firestore batch
  * limit, so arbitrarily large result sets can be swept without hitting the
@@ -49,10 +51,11 @@ interface PagedDeleteResult {
  */
 export const deletePagedQueryResults = async (
     query: FirebaseFirestore.Query,
-    options: { pageSize?: number; maxPages?: number } = {},
+    options: { pageSize?: number; maxPages?: number; filter?: (doc: FirebaseFirestore.DocumentSnapshot) => boolean } = {},
 ): Promise<PagedDeleteResult> => {
     const pageSize = options.pageSize ?? DEFAULT_CLEANUP_PAGE_SIZE;
     const maxPages = options.maxPages ?? DEFAULT_MAX_CLEANUP_PAGES;
+    const { filter } = options;
     let deletedCount = 0;
     let truncated = false;
 
@@ -62,10 +65,16 @@ export const deletePagedQueryResults = async (
             break;
         }
 
-        const refs = snapshot.docs.map(doc => doc.ref);
+        const refs = (filter ? snapshot.docs.filter(filter) : snapshot.docs).map(doc => doc.ref);
+        if (refs.length === 0) {
+            // Every document in the window is excluded — nothing left to
+            // delete (the window cannot advance past excluded records).
+            break;
+        }
+
         deletedCount += await deleteDocumentsInChunks(refs);
 
-        if (refs.length < pageSize) {
+        if (snapshot.size < pageSize) {
             break;
         }
 

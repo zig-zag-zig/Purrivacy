@@ -15,8 +15,10 @@ export const deleteAccessSession = async (accessToken: string): Promise<void> =>
  * (Firestore batches cap at 500 writes). Idempotent by construction: a
  * second run simply deletes what remains.
  *
- * The excluded family's records are filtered at query level ('!='), so the
- * paged sweep always makes progress and cannot spin on excluded pages.
+ * The excluded family's records are filtered IN CODE rather than with a
+ * `where(familyId, '!=', ...)` query: `!=` requires a composite Firestore
+ * index in production (silently missing = every revoke fails with
+ * FAILED_PRECONDITION), while the emulator does not enforce indexes at all.
  */
 export const deleteAllUserSessions = async (
     userId: string,
@@ -24,21 +26,25 @@ export const deleteAllUserSessions = async (
 ): Promise<number> => {
     const { excludeFamilyId } = options;
 
-    let sessionsQuery = sessionCollections.sessions.where('userId', '==', userId);
-    let refreshTokensQuery = sessionCollections.refreshTokens.where('userId', '==', userId);
-    let familiesQuery = sessionCollections.refreshTokenFamilies.where('userId', '==', userId);
-
-    if (excludeFamilyId) {
-        sessionsQuery = sessionsQuery.where('refreshTokenFamilyId', '!=', excludeFamilyId);
-        refreshTokensQuery = refreshTokensQuery.where('familyId', '!=', excludeFamilyId);
-        familiesQuery = familiesQuery.where('familyId', '!=', excludeFamilyId);
-    }
-
-    const queries = [sessionsQuery, refreshTokensQuery, familiesQuery];
+    // Per-collection family field names: sessions carry refreshTokenFamilyId,
+    // the token/family collections carry familyId.
+    const familyFieldByCollection: Record<string, string> = {
+        sessions: 'refreshTokenFamilyId',
+        refreshTokens: 'familyId',
+        refreshTokenFamilies: 'familyId',
+    };
 
     let deletedCount = 0;
-    for (const query of queries) {
-        const result = await deletePagedQueryResults(query);
+    for (const [name, collection] of Object.entries(sessionCollections)) {
+        const familyField = familyFieldByCollection[name];
+        const result = await deletePagedQueryResults(
+            collection.where('userId', '==', userId),
+            {
+                filter: excludeFamilyId
+                    ? (doc) => doc.get(familyField) !== excludeFamilyId
+                    : undefined,
+            },
+        );
         deletedCount += result.deletedCount;
     }
 

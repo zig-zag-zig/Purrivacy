@@ -1,4 +1,4 @@
-import { db } from '../../../infrastructure/firebase';
+import { auth, db } from '../../../infrastructure/firebase';
 import { env } from '../../../config/env';
 import { ConflictError, TransitionError } from '../../../utils/errors';
 import { createLogger } from '../../../utils/logger';
@@ -12,6 +12,18 @@ import { SessionRevocationService } from '../../session/application/SessionRevoc
 import { executeTransition, TransitionStep } from '../../../core/transitions/transitionRunner';
 
 const logger = createLogger('features.user.writes');
+
+/**
+ * True when the Firebase Admin Auth SDK reports that the identity is already
+ * gone. Deleting a user account is idempotent, so a retried deletion that
+ * finds no Firebase identity is still a success.
+ */
+const isAuthUserNotFoundError = (error: unknown): boolean => (
+    typeof error === 'object'
+    && error !== null
+    && 'code' in error
+    && (error as { code?: unknown }).code === 'auth/user-not-found'
+);
 
 const notifyUserDataChanged = (userId: string): void => {
     void NotificationService.sendDataOnlyNotificationSafe(userId, 'user', 'user update');
@@ -70,9 +82,14 @@ export const changeDekPassword = async (
 export const deleteUser = async (userId: string): Promise<void> => {
     // Ordered, idempotent steps (API-SEC-008): sessions are revoked first to
     // cut access, then user/MFA documents, then the RTDB key records and push
-    // tokens. Every step is independently retryable, so a partially failed
-    // deletion is completed by re-issuing the request. The structured error
-    // identifies the remaining steps for logging and for the caller.
+    // tokens, and finally the Firebase Auth identity. Deleting the identity
+    // last keeps the operation retryable: if any earlier step fails, the user
+    // can still authenticate to re-issue the request. Once the identity is
+    // gone, every other record is already deleted, so no orphaned Firebase
+    // account can remain. Each step is independently retryable, so a
+    // partially failed deletion is completed by re-issuing the request. The
+    // structured error identifies the remaining steps for logging and for
+    // the caller.
     const steps: TransitionStep[] = [
         {
             name: 'revokeSessions',
@@ -95,6 +112,22 @@ export const deleteUser = async (userId: string): Promise<void> => {
         {
             name: 'deletePushTokens',
             run: () => deleteUserPushTokensFromDb(userId),
+        },
+        {
+            name: 'deleteFirebaseUser',
+            run: async () => {
+                try {
+                    await auth.deleteUser(userId);
+                } catch (error) {
+                    // Idempotent retry: a previous attempt may already have
+                    // removed the identity; a missing Firebase user must not
+                    // turn a completed deletion into an error response.
+                    if (isAuthUserNotFoundError(error)) {
+                        return;
+                    }
+                    throw error;
+                }
+            },
         },
     ];
 

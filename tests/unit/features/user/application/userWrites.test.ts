@@ -5,6 +5,7 @@ const fakeFs = createFakeFirestore();
 
 jest.mock('../../../../../src/infrastructure/firebase/index.js', () => ({
     db: fakeFs.db,
+    auth: { deleteUser: jest.fn() },
 }));
 
 jest.mock('../../../../../src/features/notification/application/NotificationService', () => ({
@@ -32,6 +33,7 @@ const getNotificationService = () => require('../../../../../src/features/notifi
 const getUserKeyRepo = () => require('../../../../../src/features/user/infrastructure/UserKeyRepository');
 const getPushTokenStore = () => require('../../../../../src/features/notification/infrastructure/pushTokenStore');
 const getRevocationService = () => require('../../../../../src/features/session/application/SessionRevocationService').SessionRevocationService;
+const getAuth = () => require('../../../../../src/infrastructure/firebase/index.js').auth;
 
 describe('userWrites', () => {
     beforeEach(() => {
@@ -89,11 +91,12 @@ describe('userWrites', () => {
     });
 
     describe('deleteUser', () => {
-        it('revokes sessions first, then deletes user, security subcollection, keys, and push tokens', async () => {
+        it('revokes sessions first, then deletes user, security subcollection, keys, push tokens, and the Firebase identity last', async () => {
             const securityPath = 'users/user-1/security';
             fakeFs.store.users = { 'user-1': { exists: true, data: { mfaEnabled: true } } };
             fakeFs.store[securityPath] = { mfa: { exists: true, data: { mfaSecret: 's' } } };
             getRevocationService().revokeAllUserSessions.mockResolvedValue(undefined);
+            getAuth().deleteUser.mockResolvedValue(undefined);
 
             const { deleteUser } = loadModule();
 
@@ -104,6 +107,59 @@ describe('userWrites', () => {
             expect(fakeFs.store[securityPath].mfa.exists).toBe(false);
             expect(getUserKeyRepo().deleteUserEncryptedKeys).toHaveBeenCalledWith('user-1');
             expect(getPushTokenStore().deleteUserPushTokensFromDb).toHaveBeenCalledWith('user-1');
+            // The Firebase identity is removed last, after every data step.
+            expect(getAuth().deleteUser).toHaveBeenCalledWith('user-1');
+            expect(getAuth().deleteUser.mock.invocationCallOrder[0])
+                .toBeGreaterThan(getRevocationService().revokeAllUserSessions.mock.invocationCallOrder[0]);
+            expect(getAuth().deleteUser.mock.invocationCallOrder[0])
+                .toBeGreaterThan(getUserKeyRepo().deleteUserEncryptedKeys.mock.invocationCallOrder[0]);
+            expect(getAuth().deleteUser.mock.invocationCallOrder[0])
+                .toBeGreaterThan(getPushTokenStore().deleteUserPushTokensFromDb.mock.invocationCallOrder[0]);
+        });
+
+        it('treats a missing Firebase identity as success (idempotent retry)', async () => {
+            fakeFs.store.users = { 'user-1': { exists: true, data: { mfaEnabled: true } } };
+            getRevocationService().revokeAllUserSessions.mockResolvedValue(undefined);
+            getAuth().deleteUser.mockRejectedValue(Object.assign(new Error('The user does not exist.'), { code: 'auth/user-not-found' }));
+
+            const { deleteUser } = loadModule();
+
+            await expect(deleteUser('user-1')).resolves.toBeUndefined();
+
+            expect(fakeFs.store.users['user-1'].exists).toBe(false);
+            expect(getUserKeyRepo().deleteUserEncryptedKeys).toHaveBeenCalledWith('user-1');
+            expect(getPushTokenStore().deleteUserPushTokensFromDb).toHaveBeenCalledWith('user-1');
+            expect(getAuth().deleteUser).toHaveBeenCalledWith('user-1');
+        });
+
+        it('throws a structured retryable error when the Firebase identity deletion fails', async () => {
+            fakeFs.store.users = { 'user-1': { exists: true, data: { mfaEnabled: true } } };
+            getRevocationService().revokeAllUserSessions.mockResolvedValue(undefined);
+            getAuth().deleteUser.mockRejectedValue(new Error('identity deletion failed'));
+
+            const { deleteUser } = loadModule();
+
+            await expect(deleteUser('user-1')).rejects.toMatchObject({
+                statusCode: 500,
+                details: {
+                    failedStep: 'deleteFirebaseUser',
+                    retryable: true,
+                    completedSteps: [
+                        'revokeSessions',
+                        'deleteUserDocuments',
+                        'deleteEncryptedKeys',
+                        'deletePushTokens',
+                    ],
+                    remainingSteps: ['deleteFirebaseUser'],
+                },
+            });
+
+            // A retry completes the remaining step and is idempotent.
+            getAuth().deleteUser.mockResolvedValue(undefined);
+            await deleteUser('user-1');
+
+            expect(fakeFs.store.users['user-1'].exists).toBe(false);
+            expect(getAuth().deleteUser).toHaveBeenCalledTimes(2);
         });
 
         it('throws a structured retryable error on partial failure identifying the remaining steps', async () => {
@@ -111,6 +167,7 @@ describe('userWrites', () => {
             getRevocationService().revokeAllUserSessions
                 .mockRejectedValueOnce(new Error('revocation failed'))
                 .mockResolvedValue(undefined);
+            getAuth().deleteUser.mockResolvedValue(undefined);
 
             const { deleteUser } = loadModule();
 
@@ -124,6 +181,7 @@ describe('userWrites', () => {
                         'deleteUserDocuments',
                         'deleteEncryptedKeys',
                         'deletePushTokens',
+                        'deleteFirebaseUser',
                     ],
                 },
             });
@@ -131,6 +189,7 @@ describe('userWrites', () => {
             // Nothing was deleted by the failed attempt.
             expect(fakeFs.store.users['user-1'].exists).toBe(true);
             expect(getUserKeyRepo().deleteUserEncryptedKeys).not.toHaveBeenCalled();
+            expect(getAuth().deleteUser).not.toHaveBeenCalled();
 
             // A retry completes the remaining steps.
             await deleteUser('user-1');
@@ -139,6 +198,7 @@ describe('userWrites', () => {
             expect(getRevocationService().revokeAllUserSessions).toHaveBeenCalledTimes(2);
             expect(getUserKeyRepo().deleteUserEncryptedKeys).toHaveBeenCalledWith('user-1');
             expect(getPushTokenStore().deleteUserPushTokensFromDb).toHaveBeenCalledWith('user-1');
+            expect(getAuth().deleteUser).toHaveBeenCalledWith('user-1');
         });
     });
 });

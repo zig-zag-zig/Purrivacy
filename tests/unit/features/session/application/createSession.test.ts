@@ -94,4 +94,24 @@ describe('createBackendSession', () => {
         // The stale family should be deleted
         expect(fakeFs.store.refreshTokenFamilies['stale-fam'].exists).toBe(false);
     });
+
+    it('keeps stale device families when sweepStaleFamilies is false (MFA transitions)', async () => {
+        // MFA state transitions create their session BEFORE the code is
+        // verified; sweeping the current family there would leave the user
+        // sessionless after a wrong code. The old family must survive until
+        // the transition's revokeOldSessions step (or a failed attempt).
+        fakeFs.store.refreshTokenFamilies = {
+            'current-fam': { exists: true, data: { familyId: 'current-fam', userId: 'user-1', deviceId: 'dev-1' } },
+        };
+
+        const { createBackendSession } = loadModule();
+
+        await createBackendSession('user-1', {
+            userHasMfa: false,
+            deviceId: 'dev-1',
+            sweepStaleFamilies: false,
+        });
+
+        expect(fakeFs.store.refreshTokenFamilies['current-fam'].exists).toBe(true);
+    });
 });

@@ -58,11 +58,12 @@ export const createBackendSession = async (
     batch.set(sessionCollections.refreshTokens.doc(refreshToken.tokenId), refreshTokenData);
     await batch.commit();
 
-    if (deviceId) {
+    if (deviceId && options.sweepStaleFamilies !== false) {
         // Stale families for the same device are swept afterwards in bounded,
         // chunked pages. A failure here must not fail the login: the sweep is
         // best-effort and is retried on the next session creation for the
-        // device.
+        // device. MFA state transitions opt out (sweepStaleFamilies: false)
+        // so the CURRENT family survives a failed code verification.
         try {
             await deleteStaleDeviceFamilies(userId, deviceId, familyId);
         } catch (error) {

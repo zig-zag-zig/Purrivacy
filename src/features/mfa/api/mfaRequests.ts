@@ -8,7 +8,12 @@ export const parseMfaEnableRequest = (body: unknown): {
 } => {
     const mfaCode = requireBodyString(body, 'mfaCode', { trim: true });
     if (!/^\d{6}$/.test(mfaCode)) {
-        throw new BadRequestError('mfaCode must be a 6-digit TOTP code');
+        // Recovery codes (and malformed TOTP input) are rejected here: MFA
+        // enrollment is TOTP-only. The message is user-facing — the MFA modal
+        // keeps itself open and shows it as a toast.
+        throw new BadRequestError(
+            'Invalid code format. Enter the 6-digit code from your authenticator app; recovery codes cannot be used to enable MFA.',
+        );
     }
 
     return {

@@ -156,7 +156,16 @@ export class MfaSessionService {
             {
                 name: 'createSession',
                 run: async () => {
-                    const response = await createBackendSession(userId, sessionOptions);
+                    // sweepStaleFamilies: false — this step runs BEFORE the
+                    // MFA code is verified. Sweeping the user's current
+                    // family here would leave them sessionless after a wrong
+                    // code (the new family gets revoked by compensation and
+                    // the old one is gone). revokeOldSessions cleans up old
+                    // families on success.
+                    const response = await createBackendSession(userId, {
+                        ...sessionOptions,
+                        sweepStaleFamilies: false,
+                    });
                     sessionResponse = response;
                     return response;
                 },

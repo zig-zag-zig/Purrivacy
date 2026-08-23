@@ -109,7 +109,7 @@ describe('MfaSessionService', () => {
             const result = await MfaSessionService.enableMfaAndCreateSession('user-1', '123456', true, 'dev-1');
 
             expect(getCreateBackendSession()).toHaveBeenCalledWith('user-1', {
-                userHasMfa: true, mfaTrusted: true, deviceId: 'dev-1',
+                userHasMfa: true, mfaTrusted: true, deviceId: 'dev-1', sweepStaleFamilies: false,
             });
             expect(getVerifyAndEnableMfa()).toHaveBeenCalledWith('user-1', '123456', 'dev-1');
             expect(getRevocationService().revokeAllUserSessions).toHaveBeenCalledWith('user-1', false, {
@@ -117,6 +117,31 @@ describe('MfaSessionService', () => {
             });
             expect(result).toEqual(sessionResponse);
             // The transition progress is cleared on success.
+            expect(fakeFs.store.mfaTransitions[enableDocId].exists).toBe(false);
+        });
+
+        it('does not sweep the current family on a wrong code (transition session survives failure)', async () => {
+            // Regression: the transition's createSession must NOT sweep the
+            // user's current device families — it runs before the code is
+            // verified, and a wrong code would otherwise leave the user with
+            // no session at all (new family revoked by compensation, current
+            // family swept away), forcing a sign-out on the next attempt.
+            getUserService().getUserMfaState.mockResolvedValue({ mfaEnabled: false });
+            getVerifyAndEnableMfa().mockRejectedValue(
+                new AuthError('Invalid MFA code', { wrongMfaCode: true }, 403),
+            );
+            getCreateBackendSession().mockResolvedValue(sessionResponse);
+            const { MfaSessionService } = loadModule();
+
+            await expect(MfaSessionService.enableMfaAndCreateSession('user-1', '000000', true, 'dev-1'))
+                .rejects.toMatchObject({ statusCode: 403 });
+
+            expect(getCreateBackendSession()).toHaveBeenCalledWith('user-1', {
+                userHasMfa: true, mfaTrusted: true, deviceId: 'dev-1', sweepStaleFamilies: false,
+            });
+            // Compensation revokes only the NEW family; the current one survives.
+            expect(getFamilyMutations().revokeSessionFamily).toHaveBeenCalledWith('fam-new', 'user-1');
+            // The transition progress is cleared so a retry starts fresh.
             expect(fakeFs.store.mfaTransitions[enableDocId].exists).toBe(false);
         });
 
@@ -262,7 +287,7 @@ describe('MfaSessionService', () => {
             const result = await MfaSessionService.disableMfaAndCreateSession('user-1', 'dev-2');
 
             expect(getCreateBackendSession()).toHaveBeenCalledWith('user-1', {
-                userHasMfa: false, mfaTrusted: false, deviceId: 'dev-2',
+                userHasMfa: false, mfaTrusted: false, deviceId: 'dev-2', sweepStaleFamilies: false,
             });
             expect(getDisableMfa()).toHaveBeenCalledWith('user-1', 'dev-2');
             expect(getRevocationService().revokeAllUserSessions).toHaveBeenCalledWith('user-1', false, {
